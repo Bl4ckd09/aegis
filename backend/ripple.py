@@ -38,6 +38,7 @@ RIPPLE_DIR.mkdir(parents=True, exist_ok=True)
 GRAPH_PATH = RIPPLE_DIR / "graph.graphml"
 STOPS_PATH = RIPPLE_DIR / "stops.json"
 POIS_PATH = RIPPLE_DIR / "pois.json"
+CENT_PATH = RIPPLE_DIR / "centrality.json"
 IMD_PATH = RIPPLE_DIR / "imd_london.xlsx"
 IMD_URL = ("https://data.london.gov.uk/download/2l15g/"
            "9ee0cf66-e6f9-4e38-8eec-79c1d897e248/ID%202019%20for%20London.xlsx")
@@ -59,6 +60,8 @@ class RippleEngine:
         self.stops: list[dict] = []                 # {lat, lon, name, routes:[...], node, lsoa}
         self.lsoa: dict[str, dict] = {}             # LSOA code -> {decile, pop, name}
         self.pois: list[dict] = []                  # high-street businesses {lat,lon,name,node,lsoa}
+        self.centrality: dict[int, float] = {}      # node -> betweenness percentile (0-1)
+        self.lifelines: list[dict] = []             # top chokepoints by businesses depending on them
         self.G_cu = None                            # cuGraph graph (GPU BFS) when available
         self.engine_backend = "networkx (CPU)"
         self.ready = False
@@ -72,6 +75,8 @@ class RippleEngine:
         self._attach_stops_to_lsoa()
         self._load_pois()
         self._build_cugraph()
+        self._build_centrality()
+        self._build_lifelines()
         self.ready = True
         print(f"[ripple] ready: {self.G.number_of_nodes()} nodes, "
               f"{self.G.number_of_edges()} edges, {len(self.stops)} stops, "
@@ -93,6 +98,53 @@ class RippleEngine:
         except Exception as e:
             print(f"[ripple] cuGraph build failed ({e}); using networkx CPU")
             self.G_cu = None
+
+    def _build_centrality(self) -> None:
+        """Betweenness centrality → the road network's structural chokepoints (junctions
+        most shortest-paths funnel through). Heavy graph analytic: cuGraph on GPU, networkx
+        k-sample CPU fallback. Computed once and cached (it's a property of the graph)."""
+        import bisect
+        if CENT_PATH.exists():
+            self.centrality = {int(k): v for k, v in json.loads(CENT_PATH.read_text()).items()}
+            print(f"[ripple] centrality from cache ({len(self.centrality)} nodes)")
+            return
+        try:
+            n = self.G.number_of_nodes()
+            if self.G_cu is not None:
+                df = cugraph.betweenness_centrality(self.G_cu, k=min(500, n), normalized=True)
+                cent = dict(zip(df["vertex"].to_arrow().to_pylist(),
+                                df["betweenness_centrality"].to_arrow().to_pylist()))
+                where = "GPU (cuGraph)"
+            else:
+                cent = nx.betweenness_centrality(self.UG, k=min(150, n), normalized=True)
+                where = "CPU (networkx, sampled)"
+            vals = sorted(cent.values())
+            m = len(vals) or 1
+            self.centrality = {int(node): bisect.bisect_left(vals, c) / m for node, c in cent.items()}
+            CENT_PATH.write_text(json.dumps({str(k): round(v, 4) for k, v in self.centrality.items()}))
+            print(f"[ripple] betweenness centrality computed on {where} ({len(self.centrality)} nodes)")
+        except Exception as e:
+            print(f"[ripple] centrality failed ({e}) — chokepoint weighting disabled")
+            self.centrality = {}
+
+    def _build_lifelines(self) -> None:
+        """Rank the network's top chokepoints by how many high-street businesses depend
+        on them — combines betweenness + BFS reach + POIs. Proactive insight (which
+        junctions to protect), independent of today's disruptions."""
+        if not self.centrality or not self.pois:
+            self.lifelines = []
+            return
+        top = sorted(self.centrality, key=self.centrality.get, reverse=True)[:40]
+        poi_nodes = [p.get("node") for p in self.pois]
+        out = []
+        for nd in top:
+            reach = self._reach(nd, 6)
+            cnt = sum(1 for pn in poi_nodes if pn in reach)
+            out.append({"lat": self.G.nodes[nd]["y"], "lon": self.G.nodes[nd]["x"],
+                        "businesses": cnt, "centrality": round(self.centrality[nd], 3)})
+        out.sort(key=lambda z: -z["businesses"])
+        self.lifelines = out[:8]
+        print(f"[ripple] lifelines: top chokepoint serves {self.lifelines[0]['businesses'] if self.lifelines else 0} businesses")
 
     def _load_graph(self) -> None:
         if GRAPH_PATH.exists():
@@ -311,18 +363,24 @@ class RippleEngine:
         seeds = [(s, "road") for s in road_seeds if s.get("lat") and s.get("lon")] \
             + [(s, "transit") for s in transit_seeds if s.get("lat") and s.get("lon")]
         node_weight: dict[int, float] = {}
+        chokepoints: list[dict] = []
         if seeds:
             nodes = ox.distance.nearest_nodes(self.G, [s["lon"] for s, _ in seeds],
                                               [s["lat"] for s, _ in seeds])
             for (s, kind), n in zip(seeds, nodes):
                 w = float(s.get("weight", 0.5))
-                if kind == "road":   # network ripple, severity-scaled radius
-                    hit = self._reach(int(n), max(4, round(hops_base * (0.5 + w))))
+                if kind == "road":   # network ripple; WIDER on chokepoints (high betweenness)
+                    cent = self.centrality.get(int(n), 0.0)
+                    hit = self._reach(int(n), max(4, round(hops_base * (0.5 + w) + 5 * cent)))
+                    if cent >= 0.9:  # disruption sitting on a top-10% network chokepoint
+                        chokepoints.append({"lat": s["lat"], "lon": s["lon"],
+                                            "centrality": round(cent, 3), "weight": round(w, 2)})
                 else:                # transit: local impairment around the stop/station
                     hit = [int(n), *self.UG.neighbors(int(n))]
                 for m in hit:
                     if node_weight.get(m, 0) < w:
                         node_weight[m] = w
+            chokepoints.sort(key=lambda x: -x["centrality"])
 
         agg = defaultdict(lambda: {"total": 0, "affected": 0, "wsum": 0.0, "slat": 0.0, "slon": 0.0})
         for p in self.pois:
@@ -346,11 +404,14 @@ class RippleEngine:
         return {
             "areas": areas,
             "ranked": ranked,
+            "chokepoints": chokepoints[:8],
+            "lifelines": self.lifelines,
             "totals": {"businesses": sum(x["total"] for x in areas),
                        "affected": sum(x["affected"] for x in areas),
                        "deprived_affected": sum(x["affected"] for x in areas if x["decile"] <= 2),
                        "road_disruptions": len([s for s in road_seeds if s.get("lat")]),
-                       "transit_points": len(transit_seeds)},
+                       "transit_points": len(transit_seeds),
+                       "chokepoint_disruptions": len(chokepoints)},
             "engine": self.engine_backend,
         }
 

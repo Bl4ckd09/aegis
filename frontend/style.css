@@ -79,6 +79,9 @@ main { flex: 1; display: flex; min-height: 0; }
 .hs-list li { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
 .hs-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-hit { color: var(--muted); flex: 0 0 auto; }
+.cascade-row { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.cascade-row b { color: var(--text); }
+.cascade-row.deprived { color: #ffc36b; }
 
 /* SMB exposure panel */
 .card.exposure h2 { color: #4ea1ff; }

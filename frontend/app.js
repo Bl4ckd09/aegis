@@ -261,6 +261,21 @@ function renderHighstreets(d) {
       weight: 0, fillOpacity: a.affected > 0 ? 0.55 : 0.12,
     }).addTo(hsLayer).bindPopup(`${a.name}<br>${a.affected}/${a.total} businesses impaired · IMD decile ${a.decile}`);
   });
+  // betweenness "lifeline" junctions — the chokepoints most businesses depend on
+  (d.lifelines || []).forEach((lf) => {
+    L.circleMarker([lf.lat, lf.lon], {
+      radius: 6, color: "#00e5ff", weight: 2, fillColor: "#00e5ff", fillOpacity: 0.9,
+    }).addTo(hsLayer).bindPopup(
+      `Critical junction (betweenness pctile ${lf.centrality})<br>${lf.businesses} businesses depend on access through here`);
+  });
+  const extra = document.getElementById("hs-extra");
+  if (extra) {
+    const choke = t.chokepoint_disruptions || 0;
+    const top = (d.lifelines || [])[0];
+    extra.innerHTML =
+      (choke ? `<div class="cascade-row deprived">⚠ ${choke} disruption(s) on critical road chokepoints today</div>` : "") +
+      (top ? `<div class="cascade-row">◆ High-street lifelines (cuGraph betweenness): busiest junction supports <b>${top.businesses}</b> businesses</div>` : "");
+  }
 }
 
 async function loadHighstreets() {
