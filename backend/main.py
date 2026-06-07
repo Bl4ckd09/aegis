@@ -38,8 +38,9 @@ class AppState:
         self.briefing: BriefingGenerator | None = None
 
     @property
-    def monitored(self) -> list[Camera]:
-        """Available cameras, optionally capped for demo responsiveness.
+    def available(self) -> list[Camera]:
+        """The camera universe shown on the map (all available, optionally capped by
+        CAMERA_LIMIT). The detector classifies a rolling window over this set.
         In replay mode frames come from the snapshot by id, so image_url isn't required."""
         avail = [c for c in self.cameras
                  if c.available and (config.REPLAY_MODE or c.image_url)]
@@ -58,7 +59,8 @@ async def lifespan(app: FastAPI):
         print(f"[startup] camera fetch failed: {e}")
         state.cameras = []
     state.camera_by_id = {c.id: c for c in state.cameras}
-    print(f"[startup] cameras={len(state.cameras)} monitored={len(state.monitored)}")
+    print(f"[startup] cameras={len(state.cameras)} on_map={len(state.available)} "
+          f"batch={config.SWEEP_BATCH}/{config.BATCH_INTERVAL_SECONDS}s")
     if config.REPLAY_MODE:
         try:
             seeded = json.loads((config.SNAPSHOT_DIR / "incidents.json").read_text())
@@ -97,7 +99,7 @@ async def health():
         "briefing_model": config.BRIEFING_MODEL if config.BRIEFING_BACKEND == "openai" else config.VL_MODEL,
         "spatial_backend": geo.backend_name(),
         "cameras_total": len(state.cameras),
-        "cameras_monitored": len(state.monitored),
+        "cameras_monitored": len(state.available),
         "scanned": state.store.scanned_count(),
         "sweeps": state.store.sweeps,
         "incidents": len(state.store.incidents()),
@@ -159,7 +161,7 @@ async def cameras():
             "view": c.view,
             "frame_url": f"/api/frame/{c.id}",
         }
-        for c in state.monitored
+        for c in state.available
     ]
 
 

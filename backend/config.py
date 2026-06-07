@@ -26,11 +26,15 @@ JAMCAM_LIST_URL = "https://api.tfl.gov.uk/Place/Type/JamCam"
 DISRUPTION_URL = "https://api.tfl.gov.uk/Road/all/Disruption"
 
 # --- Detection loop ---
-# How many cameras to actively monitor. None = all available. A subset keeps the
-# demo responsive; the Spark story is "this scales to all 795".
+# CAMERA_LIMIT caps the camera *universe* shown on the map (None = all ~795 available).
+# The detector classifies a ROLLING WINDOW over that universe: SWEEP_BATCH cameras every
+# BATCH_INTERVAL seconds, cycling through all of them — so the whole London network is on
+# the map while GPU cost stays flat (bounded per-batch) instead of scaling to N per sweep.
 CAMERA_LIMIT = int(os.environ["AEGIS_CAMERA_LIMIT"]) if os.environ.get("AEGIS_CAMERA_LIMIT") else None
-DETECT_CONCURRENCY = int(os.environ.get("AEGIS_CONCURRENCY", "8"))  # parallel VL calls in flight
-POLL_INTERVAL_SECONDS = int(os.environ.get("AEGIS_POLL_INTERVAL", "180"))  # JamCams refresh ~3 min
+DETECT_CONCURRENCY = int(os.environ.get("AEGIS_CONCURRENCY", "8"))   # parallel VL calls in flight
+SWEEP_BATCH = int(os.environ.get("AEGIS_SWEEP_BATCH", "40"))         # cameras classified per rolling batch
+BATCH_INTERVAL_SECONDS = float(os.environ.get("AEGIS_BATCH_INTERVAL", "12"))  # gap between batches
+POLL_INTERVAL_SECONDS = int(os.environ.get("AEGIS_POLL_INTERVAL", "180"))  # disruptions feed refresh
 VL_TIMEOUT_SECONDS = float(os.environ.get("AEGIS_VL_TIMEOUT", "120"))
 
 # --- Disruption cross-reference (lead-time insight) ---
