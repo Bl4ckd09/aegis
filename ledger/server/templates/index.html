@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STELLA — Find Your Unclaimed Business Money</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0a0a0f; color: #e8e8f0; min-height: 100vh; }
+
+  header { padding: 1.5rem 2rem; border-bottom: 1px solid #1e1e2e; display: flex; align-items: baseline; gap: 1rem; }
+  .logo { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.15em; color: #7c6af7; }
+  .tagline { font-size: 0.8rem; color: #444; }
+
+  main { max-width: 960px; margin: 0 auto; padding: 2.5rem 2rem; }
+
+  /* hero */
+  .hero h1 { font-size: 2rem; font-weight: 700; line-height: 1.25; margin-bottom: 0.4rem; }
+  .hero h1 span { color: #7c6af7; }
+  .hero p { color: #666; font-size: 0.9rem; margin-bottom: 1.8rem; max-width: 560px; }
+
+  .search-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.8rem; }
+  .search-row input {
+    flex: 1; min-width: 220px; padding: 0.85rem 1.1rem;
+    background: #13131f; border: 1.5px solid #2a2a40; border-radius: 10px;
+    color: #e8e8f0; font-size: 1rem; outline: none; transition: border-color 0.2s;
+  }
+  .search-row input:focus { border-color: #7c6af7; }
+  .search-row input::placeholder { color: #3a3a55; }
+  .search-row select {
+    padding: 0.85rem 0.9rem; background: #13131f; border: 1.5px solid #2a2a40;
+    border-radius: 10px; color: #666; font-size: 0.85rem; outline: none; cursor: pointer;
+  }
+  .btn-find {
+    padding: 0.85rem 1.8rem; background: #7c6af7; color: #fff; border: none;
+    border-radius: 10px; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    white-space: nowrap; transition: background 0.2s;
+  }
+  .btn-find:hover { background: #6b58e6; }
+  .btn-find:disabled { background: #2a2a40; color: #555; cursor: not-allowed; }
+
+  .examples { font-size: 0.77rem; color: #444; }
+  .examples kbd { background: #1a1a2a; border: 1px solid #2a2a40; border-radius: 4px; padding: 1px 6px; font-size: 0.73rem; color: #888; cursor: pointer; }
+  .examples kbd:hover { border-color: #7c6af7; color: #a78bfa; }
+
+  /* explainer box */
+  .explainer {
+    background: #0d0d1a; border: 1px solid #1e1e35; border-radius: 10px;
+    padding: 1rem 1.2rem; margin-bottom: 1.5rem; font-size: 0.8rem; color: #555;
+    display: none;
+  }
+  .explainer.show { display: block; }
+  .explainer strong { color: #888; }
+  .explainer .row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  .explainer .pill { display: flex; align-items: center; gap: 0.4rem; }
+  .badge { font-size: 0.68rem; border-radius: 4px; padding: 2px 6px; font-weight: 600; }
+  .badge-high { background: #1a3a1a; color: #4ade80; }
+  .badge-medium { background: #2a2a10; color: #facc15; }
+  .badge-warn { background: #2a1a0a; color: #f97316; }
+
+  /* loading */
+  .loading { display: none; text-align: center; padding: 3rem; color: #555; }
+  .spinner { display: inline-block; width: 28px; height: 28px; border: 2.5px solid #1e1e2e; border-top-color: #7c6af7; border-radius: 50%; animation: spin 0.7s linear infinite; margin-bottom: 0.8rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-card { display: none; background: #150a0a; border: 1px solid #4a1515; border-radius: 10px; padding: 1rem 1.2rem; color: #f87171; margin-top: 1rem; font-size: 0.85rem; }
+
+  /* results header */
+  .results-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+  .results-meta h2 { font-size: 0.9rem; color: #555; font-weight: 400; }
+  .meta-badges { display: flex; gap: 0.5rem; align-items: center; }
+  .lsoa-tag { font-size: 0.72rem; background: #13131f; border: 1px solid #222; border-radius: 5px; padding: 2px 7px; color: #444; }
+  .savings-total { font-size: 0.8rem; background: #1a1030; border: 1px solid #3d2f6e; border-radius: 5px; padding: 3px 9px; color: #a78bfa; font-weight: 600; }
+
+  /* property card */
+  .prop-card {
+    background: #11111e; border: 1px solid #1e1e30; border-radius: 12px;
+    margin-bottom: 0.8rem; overflow: hidden; transition: border-color 0.2s;
+  }
+  .prop-card.has-savings { border-color: #2d2050; }
+  .prop-card.has-savings:hover { border-color: #5a40a0; }
+
+  .prop-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 1.1rem 1.3rem; gap: 1rem; cursor: pointer;
+  }
+  .prop-left { flex: 1; min-width: 0; }
+  .prop-type { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: #555; margin-bottom: 2px; }
+  .prop-address { font-size: 0.92rem; font-weight: 600; color: #d0d0e8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prop-sub { font-size: 0.75rem; color: #444; margin-top: 2px; }
+  .prop-right { text-align: right; flex-shrink: 0; }
+  .rv-num { font-size: 1.2rem; font-weight: 700; }
+  .rv-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.07em; color: #444; }
+  .sector-tag { font-size: 0.65rem; background: #1a1a2e; border: 1px solid #2a2a40; border-radius: 4px; padding: 1px 5px; color: #555; margin-top: 3px; display: inline-block; }
+
+  /* savings badge on header */
+  .saving-chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: #1a1030; border: 1px solid #3d2f6e; border-radius: 6px;
+    padding: 3px 8px; font-size: 0.78rem; color: #a78bfa; font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* expanded body */
+  .prop-body { display: none; padding: 0 1.3rem 1.2rem; border-top: 1px solid #1a1a2a; }
+  .prop-body.open { display: block; }
+
+  .money-box {
+    display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap;
+  }
+  .money-stat {
+    flex: 1; min-width: 140px; background: linear-gradient(135deg,#150f28,#0a1520);
+    border: 1px solid #2d2050; border-radius: 8px; padding: 0.9rem 1rem;
+  }
+  .money-stat .ms-label { font-size: 0.67rem; text-transform: uppercase; letter-spacing: 0.07em; color: #666; margin-bottom: 3px; }
+  .money-stat .ms-val { font-size: 1.6rem; font-weight: 800; color: #a78bfa; line-height: 1; }
+  .money-stat .ms-sub { font-size: 0.72rem; color: #555; margin-top: 3px; }
+
+  /* credibility bar */
+  .credibility {
+    background: #0d1a0d; border: 1px solid #1a2e1a; border-radius: 7px;
+    padding: 0.7rem 1rem; margin-bottom: 0.8rem; font-size: 0.78rem; color: #4a7a4a;
+  }
+  .credibility strong { color: #5aaa5a; }
+
+  /* findings */
+  .findings-list { list-style: none; }
+  .finding-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.55rem 0; border-bottom: 1px solid #15151f; gap: 0.8rem; font-size: 0.84rem;
+  }
+  .finding-row:last-child { border-bottom: none; }
+  .finding-name { color: #b0b0c8; flex: 1; }
+  .finding-source { font-size: 0.68rem; color: #444; }
+  .finding-right { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; }
+  .finding-amt { font-weight: 600; color: #a78bfa; }
+  .no-savings-msg { font-size: 0.82rem; color: #333; padding: 0.5rem 0; }
+
+  /* actions */
+  .prop-actions { display: flex; gap: 0.6rem; margin-top: 1rem; flex-wrap: wrap; }
+  .btn-draft { padding: 0.55rem 1rem; background: #1a1030; border: 1px solid #3d2f6e; border-radius: 7px; color: #a78bfa; font-size: 0.8rem; cursor: pointer; transition: background 0.2s; }
+  .btn-draft:hover { background: #261545; }
+  .btn-govuk { padding: 0.55rem 1rem; background: transparent; border: 1px solid #222; border-radius: 7px; color: #555; font-size: 0.8rem; cursor: pointer; text-decoration: none; display: inline-block; transition: border-color 0.2s; }
+  .btn-govuk:hover { border-color: #444; color: #888; }
+  .uarn-copy { padding: 0.55rem 1rem; background: transparent; border: 1px solid #1e1e30; border-radius: 7px; color: #444; font-size: 0.78rem; cursor: pointer; }
+  .uarn-copy:hover { color: #666; border-color: #333; }
+
+  /* grants */
+  .grants-section { margin-top: 2rem; }
+  .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: #555; margin-bottom: 0.8rem; }
+  .grant-card { background: #0d1a0d; border: 1px solid #1a2e1a; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .grant-name { font-size: 0.88rem; font-weight: 600; color: #6adb6a; margin-bottom: 2px; }
+  .grant-who { font-size: 0.75rem; color: #3a6a3a; }
+  .grant-action { font-size: 0.73rem; color: #3a5a3a; margin-top: 3px; }
+  .grant-action a { color: #7c6af7; text-decoration: none; }
+  .grant-value { font-size: 0.95rem; font-weight: 700; color: #4ade80; white-space: nowrap; }
+
+  /* modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 100; align-items: center; justify-content: center; padding: 1.5rem; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #13131f; border: 1px solid #2a2a40; border-radius: 14px; padding: 1.8rem; max-width: 600px; width: 100%; max-height: 85vh; overflow-y: auto; }
+  .modal h3 { margin-bottom: 0.8rem; font-size: 0.95rem; }
+  .modal-note { font-size: 0.75rem; color: #555; margin-bottom: 0.8rem; background: #0a0a18; border: 1px solid #1e1e30; border-radius: 6px; padding: 0.5rem 0.8rem; }
+  .modal textarea { width: 100%; background: #0a0a0f; border: 1px solid #2a2a40; border-radius: 8px; color: #d0d0e8; padding: 0.9rem; font-size: 0.82rem; line-height: 1.65; min-height: 200px; resize: vertical; font-family: inherit; }
+  .modal-actions { display: flex; gap: 0.6rem; margin-top: 0.8rem; justify-content: flex-end; }
+  .btn-copy-email { padding: 0.55rem 1.2rem; background: #7c6af7; border: none; border-radius: 7px; color: #fff; font-size: 0.82rem; cursor: pointer; }
+  .btn-close-modal { padding: 0.55rem 1.2rem; background: transparent; border: 1px solid #2a2a40; border-radius: 7px; color: #666; font-size: 0.82rem; cursor: pointer; }
+
+  /* companies panel */
+  .companies-panel {
+    background: #0d0d1a; border: 1px solid #1e1e30; border-radius: 10px;
+    margin-bottom: 1.2rem; overflow: hidden;
+  }
+  .companies-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.75rem 1.2rem; cursor: pointer; user-select: none;
+  }
+  .companies-header:hover { background: #111122; }
+  .companies-title { font-size: 0.78rem; color: #666; font-weight: 600; letter-spacing: 0.05em; }
+  .companies-count { font-size: 0.72rem; background: #1a1a30; border: 1px solid #2a2a45; border-radius: 4px; padding: 1px 7px; color: #555; }
+  .companies-body { display: none; border-top: 1px solid #1a1a2a; padding: 0.6rem 0; }
+  .companies-body.open { display: block; }
+  .co-row {
+    display: flex; align-items: flex-start; gap: 0.8rem; padding: 0.5rem 1.2rem;
+    border-bottom: 1px solid #12121e; font-size: 0.8rem;
+  }
+  .co-row:last-child { border-bottom: none; }
+  .co-status { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+  .co-status.active { background: #4ade80; }
+  .co-status.dissolved { background: #555; }
+  .co-name { font-weight: 600; color: #c0c0d8; line-height: 1.3; }
+  .co-meta { font-size: 0.7rem; color: #444; margin-top: 1px; }
+  .co-sic { font-size: 0.68rem; color: #333; margin-top: 2px; }
+  .co-number { font-size: 0.68rem; color: #333; }
+  .ch-link { color: #7c6af7; text-decoration: none; font-size: 0.68rem; }
+  .ch-link:hover { text-decoration: underline; }
+  .co-note { padding: 0.5rem 1.2rem; font-size: 0.72rem; color: #333; font-style: italic; }
+
+  /* mode toggle */
+  .mode-toggle { display: flex; background: #0d0d1a; border: 1px solid #1e1e30; border-radius: 8px; padding: 3px; gap: 3px; margin-bottom: 1.2rem; width: fit-content; }
+  .mode-btn { padding: 0.45rem 1.1rem; border-radius: 6px; border: none; font-size: 0.8rem; cursor: pointer; font-weight: 500; transition: background 0.15s, color 0.15s; background: transparent; color: #555; }
+  .mode-btn.active { background: #1e1830; color: #a78bfa; }
+
+  /* single biz form */
+  .biz-form { background: #0d0d1a; border: 1px solid #1e1e30; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1.2rem; display: none; }
+  .biz-form.show { display: block; }
+  .biz-form label { font-size: 0.75rem; color: #555; display: block; margin-bottom: 3px; }
+  .biz-form input, .biz-form select { width: 100%; padding: 0.6rem 0.8rem; background: #13131f; border: 1px solid #2a2a40; border-radius: 7px; color: #d0d0e8; font-size: 0.88rem; margin-bottom: 0.7rem; outline: none; }
+  .biz-form input:focus { border-color: #7c6af7; }
+  .biz-hint { font-size: 0.72rem; color: #333; margin-top: -0.5rem; margin-bottom: 0.7rem; }
+  .biz-form-row { display: flex; gap: 0.7rem; flex-wrap: wrap; }
+  .biz-form-row > div { flex: 1; min-width: 160px; }
+
+  /* single biz highlight */
+  .prop-card.my-biz { border-color: #7c6af7 !important; box-shadow: 0 0 0 1px #3d2f6e; }
+  .my-biz-tag { font-size: 0.65rem; background: #2a1a50; color: #a78bfa; border: 1px solid #4a2a80; border-radius: 4px; padding: 1px 6px; margin-left: 6px; }
+
+  /* multi-property checker */
+  .multi-check-box {
+    margin-top: 0.8rem; background: #0f0f1f; border: 1px solid #1e1e35;
+    border-radius: 7px; padding: 0.65rem 0.9rem;
+  }
+  .multi-check-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; color: #555; cursor: pointer; }
+  .multi-check-row input[type=checkbox] { accent-color: #7c6af7; cursor: pointer; }
+  .multi-sub { display: none; margin-top: 0.5rem; padding-left: 1.4rem; }
+  .multi-sub-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #444; cursor: pointer; margin-bottom: 4px; }
+  .multi-ineligible { display: none; color: #f97316; font-size: 0.75rem; background: #1a0e05; border: 1px solid #3a2010; border-radius: 5px; padding: 0.45rem 0.7rem; margin-top: 5px; }
+  .multi-ok { display: none; color: #4ade80; font-size: 0.75rem; background: #0a1a0a; border: 1px solid #1a3a1a; border-radius: 5px; padding: 0.45rem 0.7rem; margin-top: 5px; }
+
+  @media (max-width: 580px) {
+    .hero h1 { font-size: 1.5rem; }
+    .money-box { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">STELLA</div>
+  <div class="tagline">On-device · deterministic · every £ traces to gov.uk</div>
+  <nav class="app-nav" style="margin-left:auto;display:flex;gap:1.1rem;align-items:baseline;font-size:0.85rem;">
+    <span style="color:#7c6af7;font-weight:600;">Financial Health</span>
+    <a id="accessHealthLink" href="#" target="_blank" rel="noopener"
+       style="color:#666;text-decoration:none;" title="Live transport-disruption early-warning for London businesses">Access Health →</a>
+  </nav>
+</header>
+<script>
+  // Sibling app (Access Health / Ripple) runs on :8000 on the same host —
+  // host-relative so it works over the SSH tunnel (localhost) and direct on hp-15.
+  document.getElementById("accessHealthLink").href =
+    location.protocol + "//" + location.hostname + ":8000/";
+</script>
+
+<main>
+  <div class="hero">
+    <h1>Find what London businesses<br>are <span>owed and not claiming.</span></h1>
+    <p style="color:#666;font-size:0.9rem;margin-bottom:1.2rem;max-width:560px">Every £ figure traces to published gov.uk rules. Not AI estimates.</p>
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modeStreet" onclick="setMode('street')">Street Scanner</button>
+      <button class="mode-btn" id="modeBiz" onclick="setMode('biz')">My Business</button>
+    </div>
+
+    <!-- Street scanner mode -->
+    <div id="streetMode">
+      <div class="search-row">
+        <input type="text" id="queryInput" placeholder="Postcode e.g. E8 1DY — or a business name" autofocus>
+        <select id="sectorSelect" title="Override sector if auto-detected wrongly">
+          <option value="">Sector — auto detected</option>
+          <option value="cafe">☕ Café / Coffee shop</option>
+          <option value="retail">🛍 Retail / Shop</option>
+          <option value="pub">🍺 Pub / Bar</option>
+          <option value="hospitality">🏨 Hotel / Guest house</option>
+          <option value="office">💼 Office</option>
+          <option value="industrial">🏭 Industrial / Warehouse</option>
+          <option value="leisure">🏋️ Gym / Leisure</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="btn-find" id="searchBtn" onclick="doSearch()">Find Money →</button>
+      </div>
+      <div class="examples">
+        Try: <kbd onclick="fillAndSearch('E8 1DY')">E8 1DY</kbd>
+             <kbd onclick="fillAndSearch('EC1N 7TE')">EC1N 7TE</kbd>
+             <kbd onclick="fillAndSearch('E17 7BH')">E17 7BH</kbd>
+             <kbd onclick="fillAndSearch('SE15 4JR')">SE15 4JR</kbd>
+             <kbd onclick="fillAndSearch('N16 8JJ')">N16 8JJ</kbd>
+      </div>
+    </div>
+
+    <!-- My Business mode -->
+    <div id="bizMode" style="display:none">
+      <div class="biz-form show" id="bizForm">
+        <div class="biz-form-row">
+          <div>
+            <label>Your business name (optional — for the claim letter)</label>
+            <input type="text" id="bizName" placeholder="e.g. Prufrock Coffee">
+          </div>
+          <div>
+            <label>Postcode of your premises *</label>
+            <input type="text" id="bizPostcode" placeholder="e.g. EC1N 7TE">
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:#333;margin-bottom:0.8rem;line-height:1.5">
+          STELLA looks up your company on Companies House, derives your sector from SIC codes, and automatically matches your property in the VOA database. No clicking through lists.
+        </div>
+        <button class="btn-find" onclick="doBizSearch()">Check My Business →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Explainer — shown after first search -->
+  <div class="explainer" id="explainer">
+    <strong>What you're seeing:</strong> Each card is a physical premises registered at this postcode in the government's Valuation Office Agency (VOA) database.
+    The VOA tracks <em>properties</em>, not business names — your business will appear as e.g. "CAFE AND PREMISES".
+    Find your address in the list to see your relief eligibility.
+    <div class="row">
+      <span class="pill"><span class="badge badge-high">high</span> Rule is law — unambiguous, traceable to gov.uk</span>
+      <span class="pill"><span class="badge badge-medium">medium</span> Likely eligible — verify with your council</span>
+      <span class="pill"><span class="badge badge-warn">check</span> Flag to investigate — not a confirmed saving</span>
+    </div>
+    <div style="margin-top:0.5rem; color:#444;">
+      ⚠ SBRR requires <strong style="color:#555">single property occupation</strong>. If your business has multiple sites, eligibility differs — confirm with your billing authority.
+      To verify any RV: <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" style="color:#7c6af7">gov.uk/correct-your-business-rates</a>
+    </div>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <div style="font-size:0.85rem">Searching 311,750 London properties…</div>
+  </div>
+
+  <div class="error-card" id="errorCard"></div>
+
+  <!-- Companies House panel — shown after postcode search -->
+  <div class="companies-panel" id="companiesPanel" style="display:none">
+    <div class="companies-header" onclick="toggleCompanies()">
+      <span class="companies-title">COMPANIES REGISTERED AT THIS POSTCODE</span>
+      <span class="companies-count" id="companiesCount">loading…</span>
+    </div>
+    <div class="companies-body" id="companiesBody">
+      <div id="companiesList"></div>
+      <div class="co-note">Source: Companies House registered addresses. Note: registered ≠ trading address — a business may trade here but register elsewhere.</div>
+    </div>
+  </div>
+
+  <div id="results"></div>
+  <div class="grants-section" id="grantsSection" style="display:none">
+    <div class="section-title">Grants &amp; Funding — matched to this business type</div>
+    <div id="grantsContainer"></div>
+  </div>
+</main>
+
+<!-- Email modal -->
+<div class="modal-overlay" id="emailModal">
+  <div class="modal">
+    <h3>📧 Draft Claim Letter</h3>
+    <div class="modal-note">
+      Generated by the local LLM on your device. Review before sending — confirm the RV at
+      <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" style="color:#7c6af7">gov.uk</a> first.
+    </div>
+    <div id="emailSpinner" style="color:#555;font-size:0.82rem;display:none">Drafting with on-device LLM…</div>
+    <textarea id="emailText" readonly placeholder="Drafting…"></textarea>
+    <div class="modal-actions">
+      <button class="btn-close-modal" onclick="closeModal()">Close</button>
+      <button class="btn-copy-email" onclick="copyEmail()">Copy to clipboard</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentBiz = null;
+let _renderedBizzes = [];
+let _currentMode = 'street';
+let _bizHintFilter = '';
+
+document.getElementById('queryInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+document.getElementById('bizPostcode').addEventListener('keydown', e => { if (e.key === 'Enter') doBizSearch(); });
+
+function setMode(mode) {
+  _currentMode = mode;
+  document.getElementById('modeStreet').classList.toggle('active', mode === 'street');
+  document.getElementById('modeBiz').classList.toggle('active', mode === 'biz');
+  document.getElementById('streetMode').style.display = mode === 'street' ? 'block' : 'none';
+  document.getElementById('bizMode').style.display = mode === 'biz' ? 'block' : 'none';
+  clearResults();
+}
+
+let _bizContext = {};  // persisted across step1 → step2
+
+async function doBizSearch() {
+  const postcode = document.getElementById('bizPostcode').value.trim().toUpperCase();
+  const name     = document.getElementById('bizName').value.trim();
+  if (!name)     { showError('Enter your business name'); return; }
+  if (!postcode) { showError('Enter your postcode'); return; }
+  _bizContext = {postcode, name};
+  setLoading(true);
+  clearResults();
+  document.getElementById('loading').querySelector('div:last-child').textContent =
+    'Looking up company on Companies House + VOA…';
+  try {
+    const res = await fetch('/api/biz-profile', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({postcode, name})
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { showError(data.error || 'Something went wrong'); return; }
+    if (data.step === 'pick_property') renderPropertyPicker(data);
+    else renderBizProfile(data);
+  } catch(e) {
+    showError('Cannot reach server — is it running on port 5001?');
+  } finally { setLoading(false); }
+}
+
+function renderPropertyPicker(data) {
+  const el = document.getElementById('results');
+  const props = data.properties || [];
+  const name  = data.biz_name || 'your business';
+  const ch    = data.ch_profile || {};
+
+  let html = `
+  <div style="background:#0d0d1a;border:1px solid #2a2040;border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:1rem">
+    <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:#7c6af7;margin-bottom:4px">Step 2 of 2 — Identify Your Property</div>
+    <div style="font-size:0.9rem;color:#ccc;margin-bottom:3px">VOA found <strong>${props.length} premises</strong> at <strong>${esc(_bizContext.postcode)}</strong> — click the one that's yours.</div>
+    <div style="font-size:0.75rem;color:#444">Property names come from government records (CAFE AND PREMISES, SHOP AND PREMISES etc.) — not trading names. Find your address below.</div>
+    ${ch.name ? `<div style="margin-top:0.5rem;font-size:0.75rem;color:#555">Companies House match: <strong style="color:#888">${esc(ch.name)}</strong> (${esc(ch.number||'')})</div>` : ''}
+  </div>`;
+
+  props.forEach(b => {
+    const hasSav = b.totals.total_annual_savings > 0;
+    const savChip = hasSav
+      ? `<span style="font-size:0.72rem;background:#1a1030;border:1px solid #3d2f6e;border-radius:5px;padding:2px 7px;color:#a78bfa;font-weight:600;white-space:nowrap">💰 £${fmt(b.totals.total_annual_savings)}/yr</span>`
+      : `<span style="font-size:0.72rem;color:#333">no SBRR</span>`;
+    html += `
+    <div onclick="selectProperty('${esc(b.uarn)}')"
+         style="background:#11111e;border:1px solid ${hasSav?'#2d2050':'#1e1e30'};border-radius:10px;
+                padding:0.9rem 1.2rem;margin-bottom:0.5rem;cursor:pointer;
+                display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;
+                transition:border-color 0.15s"
+         onmouseover="this.style.borderColor='#5a40a0'"
+         onmouseout="this.style.borderColor='${hasSav?'#2d2050':'#1e1e30'}'">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:#555">${esc(b.name)}</div>
+        <div style="font-size:0.9rem;font-weight:600;color:#d0d0e8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.address)}</div>
+        <div style="font-size:0.72rem;color:#444;margin-top:2px">${esc(b.sector)} · UARN ${esc(b.uarn)}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:1.1rem;font-weight:700;color:${hasSav?'#a78bfa':'#555'}">£${fmt(b.rateable_value)}</div>
+        <div style="font-size:0.65rem;color:#444;margin-bottom:3px">RV 2026</div>
+        ${savChip}
+      </div>
+    </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+async function selectProperty(uarn) {
+  setLoading(true);
+  try {
+    const res = await fetch('/api/biz-profile', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({..._bizContext, uarn})
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { showError(data.error || 'Error'); return; }
+    renderBizProfile(data);
+  } catch(e) {
+    showError('Cannot reach server');
+  } finally { setLoading(false); }
+}
+
+function renderBizProfile(data) {
+  const el = document.getElementById('results');
+  const prop = data.property;
+  const ch   = data.ch_profile || {};
+  const grants = data.grants || [];
+  const hasSavings = prop.totals.total_annual_savings > 0;
+  const displayName = data.biz_name || ch.name || prop.name;
+
+  // Verification badge config
+  const verif = data.ch_verification || 'not_found';
+  const verifCfg = {
+    verified:  {col:'#4ade80', bg:'#0a1a0a', bd:'#1a3a1a', icon:'✓', label:'Verified on Companies House'},
+    likely:    {col:'#facc15', bg:'#1a1a06', bd:'#2a2a10', icon:'~', label:'Likely match — registered address differs'},
+    name_only: {col:'#f97316', bg:'#1a0e05', bd:'#2a1a0a', icon:'~', label:'Partial match — confirm details'},
+    not_found: {col:'#555',    bg:'#111',    bd:'#222',    icon:'?', label:'Not found on Companies House'},
+  }[verif] || {col:'#555',bg:'#111',bd:'#222',icon:'?',label:'Unknown'};
+
+  // Business profile card
+  let html = `
+  <div style="background:#11111e;border:1.5px solid #7c6af7;border-radius:14px;padding:1.3rem;margin-bottom:1rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:5px;flex-wrap:wrap">
+          <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:#7c6af7">My Business</div>
+          <span style="font-size:0.68rem;background:${verifCfg.bg};border:1px solid ${verifCfg.col};color:${verifCfg.col};border-radius:4px;padding:1px 7px;font-weight:600">
+            ${verifCfg.icon} ${verifCfg.label}
+          </span>
+        </div>
+        <div style="font-size:1.2rem;font-weight:700;color:#e8e8f0">${esc(ch.name || displayName)}</div>
+        ${ch.number ? `
+        <div style="font-size:0.75rem;color:#555;margin-top:3px">
+          No. <a href="https://find-and-update.company-information.service.gov.uk/company/${esc(ch.number)}" target="_blank" style="color:#7c6af7">${esc(ch.number)} ↗</a>
+          · ${esc(ch.status||'')}
+          ${data.company_age_years != null ? `· Founded ~${2026-data.company_age_years}` : ''}
+        </div>` : ''}
+        ${data.ch_note ? `<div style="font-size:0.72rem;color:#444;margin-top:4px">${esc(data.ch_note)}</div>` : ''}
+        <div style="font-size:0.8rem;color:#555;margin-top:6px">📍 ${esc(prop.address)} · ${esc(prop.borough)}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:0.65rem;text-transform:uppercase;color:#444">Rateable Value 2026</div>
+        <div style="font-size:2rem;font-weight:800;color:${hasSavings?'#a78bfa':'#555'}">£${fmt(prop.rateable_value)}</div>
+        <div style="font-size:0.7rem;color:#444">${esc(prop.sector)} · £${fmt(prop.gross_annual_bill)}/yr gross</div>
+      </div>
+    </div>
+    ${data.sic_codes && data.sic_codes.length ? `
+    <div style="margin-top:0.8rem;padding-top:0.8rem;border-top:1px solid #1a1a2a;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center">
+      <span style="font-size:0.68rem;color:#333">SIC codes:</span>
+      ${data.sic_codes.map(s=>`<span style="font-size:0.68rem;background:#1a1a2e;border:1px solid #2a2a40;border-radius:4px;padding:1px 6px;color:#555">${esc(s)}</span>`).join('')}
+    </div>` : ''}
+  </div>`;
+
+  // Relief findings
+  if (hasSavings) {
+    html += `
+    <div style="background:#11111e;border:1px solid #2d2050;border-radius:12px;padding:1.2rem;margin-bottom:1rem">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.07em;color:#555;margin-bottom:0.8rem">Rates Relief — Unclaimed</div>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem">
+        <div style="flex:1;min-width:130px;background:linear-gradient(135deg,#150f28,#0a1520);border:1px solid #2d2050;border-radius:8px;padding:0.9rem">
+          <div style="font-size:0.67rem;text-transform:uppercase;color:#666;margin-bottom:3px">Annual Saving</div>
+          <div style="font-size:2rem;font-weight:800;color:#a78bfa;line-height:1">£${fmt(prop.totals.total_annual_savings)}</div>
+          <div style="font-size:0.72rem;color:#555;margin-top:3px">per year</div>
+        </div>
+        <div style="flex:1;min-width:130px;background:linear-gradient(135deg,#150f28,#0a1520);border:1px solid #2d2050;border-radius:8px;padding:0.9rem">
+          <div style="font-size:0.67rem;text-transform:uppercase;color:#666;margin-bottom:3px">Backdated est. (from Apr 2023)</div>
+          <div style="font-size:2rem;font-weight:800;color:#a78bfa;line-height:1">£${fmt(prop.totals.total_backdated)}</div>
+          <div style="font-size:0.72rem;color:#555;margin-top:3px">ask council to backdate further</div>
+        </div>
+      </div>
+      <div style="background:#0d1a0d;border:1px solid #1a2e1a;border-radius:7px;padding:0.7rem 1rem;font-size:0.78rem;color:#4a7a4a;margin-bottom:0.8rem">
+        <strong style="color:#5aaa5a">Why we're confident:</strong> Deterministic calculation from VOA RV + gov.uk multipliers.
+        Verify at <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" style="color:#5aaa5a">gov.uk/correct-your-business-rates</a>
+      </div>
+      <ul class="findings-list">
+        ${prop.findings.filter(f=>f.annual_value>0).map(f=>`
+        <li class="finding-row">
+          <div><div class="finding-name">${esc(f.headline)}</div><div class="finding-source">${esc(f.rule)}</div></div>
+          <div class="finding-right"><span class="badge badge-${f.confidence}">${f.confidence}</span><span class="finding-amt">£${fmt(f.annual_value)}/yr</span></div>
+        </li>`).join('')}
+      </ul>
+      <div class="multi-check-box" style="margin-top:0.8rem">
+        <label class="multi-check-row">
+          <input type="checkbox" id="multi-toggle-0" onchange="handleMultiToggle(this,0)">
+          <span>My business occupies <strong style="color:#888">more than one UK property</strong></span>
+        </label>
+        <div class="multi-sub" id="multi-sub-0">
+          <label class="multi-sub-row">
+            <input type="checkbox" id="multi-rv-0" onchange="handleMultiRV(this,0)">
+            <span>Any other property has RV ≥ £2,900</span>
+          </label>
+          <div class="multi-ineligible" id="multi-ineligible-0">
+            ⚠ <strong>SBRR likely does not apply</strong> — additional properties with RV ≥ £2,900 disqualify you.
+            Exception: 12-month grace after acquiring a new property.
+            <a href="https://www.gov.uk/apply-for-business-rate-relief/small-business-rate-relief" target="_blank" style="color:#f97316">gov.uk source ↗</a>
+          </div>
+          <div class="multi-ok" id="multi-ok-0">✓ Still eligible — other properties under £2,900 each don't disqualify you.</div>
+        </div>
+      </div>
+      <div class="prop-actions" style="margin-top:1rem">
+        <button class="btn-draft" onclick="currentBiz=_bizProfileCache.property;showEmailModal()">📧 Draft claim letter</button>
+        <a href="${data.council && data.council.govuk_url ? esc(data.council.govuk_url) : 'https://www.gov.uk/apply-for-business-rate-relief/small-business-rate-relief'}" target="_blank" class="btn-govuk" style="background:#0a1a0a;border-color:#1a4a1a;color:#4ade80">Apply — gov.uk guide ↗</a>
+        ${data.council && data.council.council_url ? `<a href="${esc(data.council.council_url)}" target="_blank" class="btn-govuk">${esc(prop.borough)} Council ↗</a>` : ''}
+        <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" class="btn-govuk">Verify RV ↗</a>
+        <button class="uarn-copy" onclick="copyUarn('${esc(prop.uarn)}',this)">Copy UARN</button>
+      </div>
+      ${data.council && data.council.email ? `<div style="margin-top:0.6rem;padding:0.5rem 0.7rem;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:6px;font-size:0.75rem;color:#666">
+        <strong style="color:#888">${esc(prop.borough)} Business Rates Team</strong> &nbsp;·&nbsp;
+        <a href="mailto:${esc(data.council.email)}" style="color:#60a5fa">${esc(data.council.email)}</a>
+        ${data.council.phone ? `&nbsp;·&nbsp; ${esc(data.council.phone)}` : ''}
+      </div>` : ''}
+    </div>`;
+  } else {
+    html += `<div class="prop-card" style="padding:1.2rem 1.3rem">
+      <div style="color:#555;font-size:0.85rem">
+        RV £${fmt(prop.rateable_value)} is above SBRR thresholds — no rates relief found for this property.
+        ${prop.rateable_value < 51000 ? '<br>Check the <strong style="color:#888">2026 Revaluation Challenge</strong> — if your RV was higher before April 2026, you may have an appeal.' : ''}
+      </div>
+    </div>`;
+  }
+
+  // Grants eligibility — personalised
+  if (grants.length) {
+    html += `<div style="margin-top:1.5rem">
+      <div class="section-title">Grants Eligibility — based on your business profile</div>`;
+    grants.forEach(g => {
+      const col = {eligible:'#4ade80',likely:'#facc15',check:'#f97316'}[g.eligibility]||'#666';
+      const bg  = {eligible:'#0a1a0a',likely:'#1a1a06',check:'#1a0e05'}[g.eligibility]||'#111';
+      const bd  = {eligible:'#1a3a1a',likely:'#2a2a10',check:'#2a1a0a'}[g.eligibility]||'#222';
+      html += `<div style="background:${bg};border:1px solid ${bd};border-radius:10px;padding:1rem 1.2rem;margin-bottom:0.6rem">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:3px">
+              <span style="font-size:0.65rem;background:${bg};border:1px solid ${col};color:${col};border-radius:4px;padding:1px 6px;font-weight:600;white-space:nowrap">${g.eligibility}</span>
+              <span style="font-size:0.88rem;font-weight:600;color:${col}">${esc(g.name)}</span>
+            </div>
+            <div style="font-size:0.72rem;color:#444;margin-bottom:4px">${esc(g.funder)} · ${esc(g.deadline)}</div>
+            ${g.match_reasons.map(r=>`<div style="font-size:0.75rem;color:#3a6a3a;margin-bottom:1px">✓ ${esc(r)}</div>`).join('')}
+            ${g.blockers.map(b=>`<div style="font-size:0.72rem;color:#6a3a1a;margin-bottom:1px">⚠ ${esc(b)}</div>`).join('')}
+            <div style="font-size:0.73rem;color:#555;margin-top:5px">${esc(g.action)}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:1rem;font-weight:700;color:${col};white-space:nowrap">${esc(g.value)}</div>
+            <a href="${esc(g.url)}" target="_blank" style="font-size:0.7rem;color:#7c6af7;text-decoration:none">Apply ↗</a>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+  _renderedBizzes = [prop];
+  _bizProfileCache = data;
+
+  // Load extra insights asynchronously — non-blocking
+  if (prop && prop.rateable_value) {
+    fetch('/api/insights', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        rateable_value: prop.rateable_value,
+        sector: prop.sector,
+        borough: prop.borough,
+        postcode: prop.postcode,
+      })
+    }).then(r=>r.json()).then(d => renderInsights(d.insights || []));
+  }
+}
+
+function renderInsights(cards) {
+  if (!cards.length) return;
+  const existing = document.getElementById('insightsSection');
+  if (existing) existing.remove();
+  const sec = document.createElement('div');
+  sec.id = 'insightsSection';
+  sec.style.cssText = 'margin-top:1.2rem';
+  sec.innerHTML = `
+    <div class="section-title" style="margin-bottom:0.6rem">📍 Insights for your business</div>
+    ${cards.map(c => `
+      <div style="background:#0a0a12;border:1px solid ${c.color}33;border-left:3px solid ${c.color};border-radius:8px;padding:0.9rem 1rem;margin-bottom:0.6rem">
+        <div style="display:flex;align-items:flex-start;gap:0.6rem">
+          <span style="font-size:1.1rem">${c.icon}</span>
+          <div style="flex:1">
+            <div style="font-weight:700;color:${c.color};font-size:0.85rem;margin-bottom:3px">${esc(c.title)}</div>
+            <div style="font-size:0.8rem;color:#aaa;line-height:1.5">${esc(c.body)}</div>
+            ${c.action_url ? `<a href="${esc(c.action_url)}" target="_blank" style="display:inline-block;margin-top:6px;font-size:0.75rem;color:#60a5fa">${esc(c.action)} ↗</a>` : ''}
+          </div>
+        </div>
+      </div>`).join('')}`;
+  // Insert before grants section
+  const grants = document.getElementById('grantsSection');
+  if (grants) grants.parentNode.insertBefore(sec, grants);
+  else document.getElementById('bizResults').appendChild(sec);
+}
+
+let _bizProfileCache = {};
+
+function fillAndSearch(pc) {
+  document.getElementById('queryInput').value = pc;
+  doSearch();
+}
+
+async function doSearch() {
+  const query = document.getElementById('queryInput').value.trim();
+  const sector = document.getElementById('sectorSelect').value;
+  if (!query) return;
+  setLoading(true);
+  clearResults();
+
+  try {
+    const res = await fetch('/api/lookup', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({query, sector})
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { showError(data.error || 'Something went wrong'); return; }
+    renderResults(data);
+    if (data.businesses && data.businesses.length > 0) fetchGrants(data.businesses[0]);
+    document.getElementById('explainer').classList.add('show');
+    // Fetch Companies House names in parallel (postcode searches only)
+    const q = (data.query || '').trim().toUpperCase();
+    if (/^[A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2}$/.test(q)) fetchCompaniesAt(q);
+  } catch(e) {
+    showError('Cannot reach server — run: PORT=5001 python3 server/app.py');
+  } finally { setLoading(false); }
+}
+
+function renderResults(data, opts={}) {
+  const el = document.getElementById('results');
+  const bizzes = data.businesses || [];
+  const hint = (opts.hint || '').toLowerCase();
+
+  if (!bizzes.length) {
+    el.innerHTML = `<div class="prop-card" style="padding:1.2rem 1.3rem">
+      <div style="color:#555;font-size:0.85rem">No VOA entries found for <strong style="color:#888">${esc(data.query)}</strong>.
+      ${data.candidates ? renderCandidates(data.candidates) : ''}
+      <br><br>Try a nearby postcode or look up the property at <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" style="color:#7c6af7">gov.uk/correct-your-business-rates</a>.</div>
+    </div>`;
+    return;
+  }
+
+  const withSavings = bizzes.filter(b => b.totals.total_annual_savings > 0);
+  const noSavings   = bizzes.filter(b => b.totals.total_annual_savings === 0);
+  const totalSaving = withSavings.reduce((s,b) => s + b.totals.total_annual_savings, 0);
+
+  let html = `<div class="results-meta">
+    <h2>${bizzes.length} propert${bizzes.length===1?'y':'ies'} at ${esc(data.query)} · ${withSavings.length} with potential savings</h2>
+    <div class="meta-badges">
+      ${data.lsoa ? `<span class="lsoa-tag">LSOA ${esc(data.lsoa)}</span>` : ''}
+      ${totalSaving > 0 ? `<span class="savings-total">💰 Up to £${fmt(totalSaving)}/yr unclaimed</span>` : ''}
+    </div>
+  </div>`;
+
+  // In biz mode: matched properties first, then savings, then rest
+  let ordered;
+  if (opts.bizMode && hint) {
+    const matched   = bizzes.filter(b => b.address.toLowerCase().includes(hint) || b.name.toLowerCase().includes(hint));
+    const unmatched = bizzes.filter(b => !matched.includes(b));
+    const mWithSav  = matched.filter(b => b.totals.total_annual_savings > 0);
+    const mNoSav    = matched.filter(b => b.totals.total_annual_savings === 0);
+    ordered = [...mWithSav, ...mNoSav, ...unmatched.filter(b=>b.totals.total_annual_savings>0), ...unmatched.filter(b=>b.totals.total_annual_savings===0)];
+  } else {
+    ordered = [...withSavings, ...noSavings];
+  }
+  _renderedBizzes = ordered;
+  ordered.forEach((b, i) => { html += renderCard(b, i, {hint, bizMode: opts.bizMode}); });
+  el.innerHTML = html;
+
+  // auto-open first matched or savings card
+  if (ordered.length > 0) toggleBody(0);
+}
+
+function _isMatch(b, hint) {
+  if (!hint) return false;
+  return b.address.toLowerCase().includes(hint) || b.name.toLowerCase().includes(hint);
+}
+
+function renderCard(b, idx, opts={}) {
+  const hasSavings = b.totals.total_annual_savings > 0;
+  const findings = b.findings || [];
+  const isMyBiz = opts.bizMode && _isMatch(b, opts.hint || '');
+  const myLabel = b._bizLabel || '';
+
+  // Header chip
+  const chip = hasSavings
+    ? `<div class="saving-chip">💰 £${fmt(b.totals.total_annual_savings)}/yr unclaimed</div>`
+    : '';
+
+  // Findings rows
+  let findingsHtml = '';
+  if (hasSavings) {
+    findingsHtml = `
+      <div class="money-box">
+        <div class="money-stat">
+          <div class="ms-label">Annual saving</div>
+          <div class="ms-val">£${fmt(b.totals.total_annual_savings)}</div>
+          <div class="ms-sub">per year — likely unclaimed</div>
+        </div>
+        <div class="money-stat">
+          <div class="ms-label">Backdated estimate</div>
+          <div class="ms-val">£${fmt(b.totals.total_backdated)}</div>
+          <div class="ms-sub">est. from Apr 2023 — ask council for more</div>
+        </div>
+      </div>
+      <div class="credibility">
+        <strong>Why we're confident:</strong> This is a deterministic calculation from published gov.uk rules —
+        not AI-generated. RV £${fmt(b.rateable_value)} confirmed in official VOA 2026 list.
+        Verify at <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" style="color:#5aaa5a">gov.uk/correct-your-business-rates</a>.
+      </div>`;
+    findingsHtml += `<ul class="findings-list">`;
+    findings.forEach(f => {
+      if (f.annual_value > 0) {
+        findingsHtml += `<li class="finding-row">
+          <div>
+            <div class="finding-name">${esc(f.headline)}</div>
+            <div class="finding-source">${esc(f.rule)}</div>
+          </div>
+          <div class="finding-right">
+            <span class="badge badge-${f.confidence}">${f.confidence}</span>
+            <span class="finding-amt">£${fmt(f.annual_value)}/yr</span>
+          </div>
+        </li>`;
+      } else {
+        findingsHtml += `<li class="finding-row">
+          <div class="finding-name">${esc(f.headline)}</div>
+          <span class="badge badge-warn">investigate</span>
+        </li>`;
+      }
+    });
+    findingsHtml += `</ul>`;
+    findingsHtml += `
+    <div class="multi-check-box">
+      <label class="multi-check-row">
+        <input type="checkbox" id="multi-toggle-${idx}" onchange="handleMultiToggle(this,${idx})">
+        <span>This business occupies <strong style="color:#888">more than one UK property</strong></span>
+      </label>
+      <div class="multi-sub" id="multi-sub-${idx}">
+        <label class="multi-sub-row">
+          <input type="checkbox" id="multi-rv-${idx}" onchange="handleMultiRV(this,${idx})">
+          <span>Any other property has rateable value ≥ £2,900</span>
+        </label>
+        <div class="multi-ineligible" id="multi-ineligible-${idx}">
+          ⚠ <strong>SBRR likely does not apply.</strong> Businesses with additional properties each having RV ≥ £2,900 are excluded from Small Business Rate Relief.
+          Exception: you retain relief for 12 months after acquiring a new property.
+          Source: <a href="https://www.gov.uk/apply-for-business-rate-relief/small-business-rate-relief" target="_blank" style="color:#f97316">gov.uk/apply-for-business-rate-relief</a>
+        </div>
+        <div class="multi-ok" id="multi-ok-${idx}">
+          ✓ Still eligible — additional properties with RV &lt; £2,900 each don't disqualify you.
+          Confirm with your billing authority to be sure.
+        </div>
+      </div>
+    </div>`;
+    findingsHtml += `<div class="prop-actions">
+      <button class="btn-draft" onclick="openEmail(${idx})">📧 Draft claim letter</button>
+      <a href="https://www.gov.uk/correct-your-business-rates" target="_blank" class="btn-govuk">Verify RV on gov.uk ↗</a>
+      <button class="uarn-copy" onclick="copyUarn('${esc(b.uarn)}',this)">Copy UARN</button>
+    </div>`;
+  } else {
+    findingsHtml = `<div class="no-savings-msg">
+      Rateable value £${fmt(b.rateable_value)} is above the relief thresholds.
+      ${b.rateable_value > 12000 && b.rateable_value < 16000 ? '⚠ Near the SBRR cliff — a 2026 revaluation challenge may be worth investigating.' : 'No unclaimed rates relief found for this property.'}
+    </div>`;
+  }
+
+  const myBizClass = isMyBiz ? ' my-biz' : '';
+  const myBizTag   = isMyBiz && myLabel ? `<span class="my-biz-tag">▶ ${esc(myLabel)}</span>` : (isMyBiz ? '<span class="my-biz-tag">▶ Your property</span>' : '');
+
+  return `<div class="prop-card ${hasSavings?'has-savings':''}${myBizClass}" id="card-${idx}">
+    <div class="prop-header" onclick="toggleBody(${idx})">
+      <div class="prop-left">
+        <div class="prop-type">${esc(b.name)}${myBizTag}</div>
+        <div class="prop-address">${esc(b.address)}</div>
+        <div class="prop-sub">${esc(b.borough)} · UARN ${esc(b.uarn)}</div>
+        ${chip}
+      </div>
+      <div class="prop-right">
+        <div class="rv-label">Rateable Value</div>
+        <div class="rv-num" style="color:${hasSavings?'#a78bfa':'#555'}">${hasSavings?'':''}£${fmt(b.rateable_value)}</div>
+        <div class="rv-label">${esc(b.sector)} · £${fmt(b.gross_annual_bill)}/yr gross</div>
+        <span class="sector-tag">${esc(b.sector)}</span>
+      </div>
+    </div>
+    <div class="prop-body" id="body-${idx}">
+      ${findingsHtml}
+    </div>
+  </div>`;
+}
+
+function renderCandidates(cands) {
+  if (!cands || !cands.length) return '';
+  return '<br><strong style="color:#666">Companies House found:</strong> ' +
+    cands.map(c => `${esc(c.name)} (${esc(c.postcode||'no postcode')})`).join(' · ');
+}
+
+function toggleBody(idx) {
+  const body = document.getElementById(`body-${idx}`);
+  if (body) body.classList.toggle('open');
+}
+
+async function fetchGrants(biz) {
+  try {
+    const res = await fetch('/api/grants', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({sector: biz.sector, borough: biz.borough}) });
+    const data = await res.json();
+    renderGrants(data.grants || []);
+  } catch(e) {}
+}
+
+function renderGrants(grants) {
+  if (!grants.length) return;
+  document.getElementById('grantsSection').style.display = 'block';
+  document.getElementById('grantsContainer').innerHTML = grants.map((g, i) => `
+    <div class="grant-card" id="grant-card-${i}">
+      <div style="flex:1">
+        <div class="grant-name">${esc(g.name)}</div>
+        <div class="grant-who">${esc(g.funder || g.who || '')}</div>
+        <div style="font-size:0.75rem;color:#888;margin:4px 0">${g.match_reasons ? g.match_reasons.map(r=>`✓ ${esc(r)}`).join(' &nbsp;') : ''}</div>
+        <div class="grant-action">${esc(g.action)} — <a href="${esc(g.url)}" target="_blank">Apply ↗</a></div>
+        <div id="grant-draft-${i}" style="display:none;margin-top:10px">
+          <div style="font-size:0.72rem;color:#aaa;margin-bottom:6px;font-weight:600">AI-DRAFTED APPLICATION EMAIL</div>
+          <textarea id="grant-email-${i}" style="width:100%;min-height:120px;background:#0a0a0a;color:#e5e5e5;border:1px solid #333;border-radius:6px;padding:8px;font-size:0.8rem;resize:vertical"></textarea>
+          <div style="font-size:0.72rem;color:#aaa;margin:8px 0 4px;font-weight:600">ACTION STEPS</div>
+          <div id="grant-steps-${i}" style="font-size:0.8rem;color:#ccc;white-space:pre-line;background:#0a0a0a;border:1px solid #222;border-radius:6px;padding:8px"></div>
+          <button onclick="copyGrantEmail(${i})" style="margin-top:6px;padding:4px 12px;background:#1a1a2e;border:1px solid #333;color:#aaa;border-radius:4px;cursor:pointer;font-size:0.75rem">Copy email</button>
+        </div>
+        <button onclick="draftGrant(${i})" id="grant-btn-${i}" style="margin-top:8px;padding:5px 14px;background:#0f1a2e;border:1px solid #1e3a5f;color:#60a5fa;border-radius:5px;cursor:pointer;font-size:0.78rem">✍ Help me apply</button>
+      </div>
+      <div style="text-align:right;min-width:100px">
+        <div class="grant-value">${esc(g.value)}</div>
+        <div style="margin-top:4px;font-size:0.7rem;padding:2px 7px;border-radius:10px;display:inline-block;${
+          g.eligibility==='eligible' ? 'background:#0a2a0a;color:#4ade80;border:1px solid #1a4a1a' :
+          g.eligibility==='likely'   ? 'background:#1a1a06;color:#facc15;border:1px solid #2a2a10' :
+                                       'background:#111;color:#888;border:1px solid #222'
+        }">${esc(g.eligibility)}</div>
+      </div>
+    </div>`).join('');
+  _grantsCache = grants;
+}
+
+let _grantsCache = [];
+
+function draftGrant(i) {
+  const g = _grantsCache[i];
+  const biz = _bizProfileCache.property || {};
+  const bizMeta = {
+    name: _bizProfileCache.biz_name || '',
+    sector: biz.sector || '',
+    borough: biz.borough || '',
+    rateable_value: biz.rateable_value || 0,
+    company_age_years: _bizProfileCache.company_age_years || '',
+  };
+  const btn = document.getElementById(`grant-btn-${i}`);
+  btn.textContent = '⏳ Writing…'; btn.disabled = true;
+  const box = document.getElementById(`grant-draft-${i}`);
+  const emailTA = document.getElementById(`grant-email-${i}`);
+  const stepsDiv = document.getElementById(`grant-steps-${i}`);
+  box.style.display = 'block';
+  emailTA.value = '';
+  stepsDiv.textContent = '';
+
+  // Stream email first
+  streamSSE('/api/draft-grant', {grant: g, business: bizMeta, mode: 'email'}, emailTA, () => {
+    // Then stream steps
+    streamSSE('/api/draft-grant', {grant: g, business: bizMeta, mode: 'steps'}, stepsDiv, () => {
+      btn.style.display = 'none';
+    });
+  });
+}
+
+function streamSSE(url, body, target, onDone) {
+  fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+    .then(r => {
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      function read() {
+        reader.read().then(({done, value}) => {
+          if (done) { if (onDone) onDone(); return; }
+          buf += decoder.decode(value, {stream: true});
+          const lines = buf.split('\n');
+          buf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const d = line.slice(5).trim();
+            if (d === '[DONE]') { if (onDone) onDone(); return; }
+            try {
+              const j = JSON.parse(d);
+              if (j.t) {
+                if (target.tagName === 'TEXTAREA') target.value += j.t;
+                else target.textContent += j.t;
+              }
+            } catch(e) {}
+          }
+          read();
+        });
+      }
+      read();
+    }).catch(() => { if (onDone) onDone(); });
+}
+
+function copyGrantEmail(i) {
+  const ta = document.getElementById(`grant-email-${i}`);
+  navigator.clipboard.writeText(ta.value);
+}
+
+function openEmail(idx) {
+  currentBiz = _renderedBizzes[idx] || null;
+  showEmailModal();
+}
+
+function showEmailModal() {
+  if (!currentBiz) return;
+  document.getElementById('emailModal').classList.add('open');
+  const ta = document.getElementById('emailText');
+  ta.value = '';
+  document.getElementById('emailSpinner').style.display = 'block';
+  streamSSE('/api/draft-email', {business: currentBiz}, ta, () => {
+    document.getElementById('emailSpinner').style.display = 'none';
+    if (!ta.value.trim()) ta.value = fallbackEmail();
+  });
+}
+
+function fallbackEmail() {
+  if (!currentBiz) return '';
+  return `Dear Business Rates Team,
+
+I am writing to claim Small Business Rate Relief for the following property:
+
+Address: ${currentBiz.address}
+UARN: ${currentBiz.uarn}
+Borough: ${currentBiz.borough}
+Rateable Value: £${fmt(currentBiz.rateable_value)}
+
+I believe this property qualifies for Small Business Rate Relief and request that this be applied to my account, including any backdated relief available.
+
+Please confirm receipt and advise on next steps.
+
+Yours faithfully,
+[Your name]
+[Your contact details]`;
+}
+
+function closeModal() { document.getElementById('emailModal').classList.remove('open'); }
+function copyEmail() {
+  navigator.clipboard.writeText(document.getElementById('emailText').value).then(() => {
+    const btn = document.querySelector('.btn-copy-email');
+    btn.textContent = '✓ Copied'; setTimeout(()=>btn.textContent='Copy to clipboard',2000);
+  });
+}
+function copyUarn(uarn, btn) {
+  navigator.clipboard.writeText(uarn).then(() => {
+    btn.textContent = '✓ Copied'; setTimeout(()=>btn.textContent='Copy UARN',2000);
+  });
+}
+
+function handleMultiToggle(cb, idx) {
+  const sub = document.getElementById(`multi-sub-${idx}`);
+  if (sub) sub.style.display = cb.checked ? 'block' : 'none';
+  if (!cb.checked) {
+    const rvCb = document.getElementById(`multi-rv-${idx}`);
+    if (rvCb) { rvCb.checked = false; handleMultiRV(rvCb, idx); }
+  }
+}
+
+function handleMultiRV(cb, idx) {
+  document.getElementById(`multi-ineligible-${idx}`).style.display = cb.checked ? 'block' : 'none';
+  document.getElementById(`multi-ok-${idx}`).style.display = (!cb.checked && document.getElementById(`multi-toggle-${idx}`).checked) ? 'block' : 'none';
+}
+
+function toggleCompanies() {
+  document.getElementById('companiesBody').classList.toggle('open');
+}
+
+async function fetchCompaniesAt(postcode) {
+  const panel = document.getElementById('companiesPanel');
+  const countEl = document.getElementById('companiesCount');
+  const listEl = document.getElementById('companiesList');
+  panel.style.display = 'block';
+  countEl.textContent = 'loading…';
+  listEl.innerHTML = '';
+  try {
+    const res = await fetch('/api/companies-at', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({postcode})
+    });
+    const data = await res.json();
+    const cos = data.companies || [];
+    if (data.error === 'no_key') {
+      countEl.textContent = 'no key';
+      listEl.innerHTML = `<div class="co-note">Set COMPANIES_HOUSE_KEY env var to enable name lookup.</div>`;
+      return;
+    }
+    const total = data.total || cos.length;
+    countEl.textContent = `${cos.length} shown${total > cos.length ? ` of ${total}` : ''}`;
+
+    if (!cos.length) {
+      listEl.innerHTML = `<div class="co-note">No companies with this registered address in Companies House.</div>`;
+      document.getElementById('companiesBody').classList.add('open');
+      return;
+    }
+
+    // Sort: active first
+    cos.sort((a,b) => (a.status==='active'?0:1)-(b.status==='active'?0:1));
+    listEl.innerHTML = cos.map(c => {
+      const active = c.status === 'active';
+      const sic = c.sic_codes && c.sic_codes.length ? `SIC ${c.sic_codes.slice(0,2).join(', ')}` : '';
+      const since = c.date_of_creation ? `since ${c.date_of_creation.slice(0,4)}` : '';
+      return `<div class="co-row">
+        <div class="co-status ${active?'active':'dissolved'}" title="${esc(c.status)}"></div>
+        <div style="flex:1;min-width:0">
+          <div class="co-name">${esc(c.name)}</div>
+          <div class="co-meta">${esc(c.status)}${since?' · '+since:''}${sic?' · '+sic:''}</div>
+          <div class="co-number">
+            No. ${esc(c.number)} ·
+            <a class="ch-link" href="https://find-and-update.company-information.service.gov.uk/company/${esc(c.number)}" target="_blank">View on Companies House ↗</a>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    // Auto-open if there are active companies
+    if (cos.some(c => c.status === 'active')) {
+      document.getElementById('companiesBody').classList.add('open');
+    }
+  } catch(e) {
+    countEl.textContent = 'error';
+    listEl.innerHTML = `<div class="co-note">Could not fetch company data.</div>`;
+  }
+}
+
+function setLoading(on) {
+  document.getElementById('loading').style.display = on?'block':'none';
+  document.getElementById('searchBtn').disabled = on;
+  document.getElementById('searchBtn').textContent = on?'Searching…':'Find Money →';
+}
+function clearResults() {
+  document.getElementById('results').innerHTML='';
+  document.getElementById('errorCard').style.display='none';
+  document.getElementById('grantsSection').style.display='none';
+  document.getElementById('companiesPanel').style.display='none';
+  document.getElementById('companiesBody').classList.remove('open');
+}
+function showError(msg) {
+  const el = document.getElementById('errorCard');
+  el.textContent = msg; el.style.display='block';
+}
+function fmt(n) { return Math.round(n).toLocaleString('en-GB'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+document.getElementById('emailModal').addEventListener('click',e=>{ if(e.target===e.currentTarget)closeModal(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Local device credentials — never commit
+.device.env
+.env.device
+credentials.local.*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Data cache (ingested locally)
+data/cache/
+
+# Large local data files — rebuild from source
+data/ch_index.db
+data/voa_london_index.csv
+*.zip
+*.xlsx
+
+# Secrets
+.env
+*.env
