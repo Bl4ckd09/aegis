@@ -82,7 +82,9 @@ async def lifespan(app: FastAPI):
     state.disruptions.start()
     state.briefing = BriefingGenerator(state, state.store)
     state.briefing.start()
-    if ripple is not None:  # load the road graph + stops in the background (cached → fast)
+    if config.RIPPLE_URL:  # cascades proxied to a remote GPU engine (e.g. Modal cuGraph)
+        print(f"[startup] ripple cascade proxied to {config.RIPPLE_URL}")
+    elif ripple is not None:  # load the local road graph + stops in the background (cached → fast)
         asyncio.create_task(asyncio.to_thread(ripple.engine.load))
         print("[startup] ripple cascade engine loading in background...")
     try:
@@ -168,7 +170,16 @@ class CascadeReq(BaseModel):
 
 @app.post("/api/cascade")
 async def cascade(req: CascadeReq):
-    """Ripple a disruption out through the road graph; return the impact footprint."""
+    """Ripple a disruption out through the road graph; return the impact footprint.
+    Proxies to a remote GPU engine (cuGraph on Modal) if AEGIS_RIPPLE_URL is set,
+    else runs the local engine (cuGraph on the Spark / networkx CPU elsewhere)."""
+    if config.RIPPLE_URL:
+        try:
+            r = await state.client.post(config.RIPPLE_URL, json=req.model_dump(), timeout=300)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"remote ripple failed: {e}")
     if ripple is None or not ripple.engine.ready:
         raise HTTPException(status_code=503, detail="ripple engine not ready")
     return await asyncio.to_thread(ripple.engine.cascade, req.lat, req.lon, req.hops)
@@ -179,7 +190,7 @@ async def ripple_status():
     if ripple is None:
         return {"available": False}
     e = ripple.engine
-    return {"available": True, "ready": e.ready,
+    return {"available": True, "ready": e.ready, "backend": e.engine_backend,
             "nodes": e.G.number_of_nodes() if e.G else 0, "stops": len(e.stops)}
 
 

@@ -25,6 +25,11 @@ TFL_APP_KEY = os.environ.get("TFL_APP_KEY", "")  # optional; raises rate limits
 JAMCAM_LIST_URL = "https://api.tfl.gov.uk/Place/Type/JamCam"
 DISRUPTION_URL = "https://api.tfl.gov.uk/Road/all/Disruption"
 
+# --- Ripple cascade engine ---
+# If set, the backend proxies /api/cascade to a remote GPU engine (e.g. the Modal
+# cuGraph service). Unset on the DGX Spark → the local engine runs (cuGraph on-box).
+RIPPLE_URL = os.environ.get("AEGIS_RIPPLE_URL", "")
+
 # --- Detection loop ---
 # CAMERA_LIMIT caps the camera *universe* shown on the map (None = all ~795 available).
 # The detector classifies a ROLLING WINDOW over that universe: SWEEP_BATCH cameras every

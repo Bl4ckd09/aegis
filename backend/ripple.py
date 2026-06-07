@@ -24,6 +24,15 @@ import osmnx as ox
 
 from . import config
 
+# RAPIDS cuGraph/cuDF for GPU BFS (on the DGX Spark or a cloud RAPIDS GPU); the
+# engine falls back to networkx on CPU when these aren't present.
+try:
+    import cudf
+    import cugraph
+    _HAS_CUGRAPH = True
+except Exception:
+    _HAS_CUGRAPH = False
+
 RIPPLE_DIR = config.DATA_DIR / "ripple"
 RIPPLE_DIR.mkdir(parents=True, exist_ok=True)
 GRAPH_PATH = RIPPLE_DIR / "graph.graphml"
@@ -48,6 +57,8 @@ class RippleEngine:
         self.UG: Optional[nx.Graph] = None          # undirected, for reachability BFS
         self.stops: list[dict] = []                 # {lat, lon, name, routes:[...], node, lsoa}
         self.lsoa: dict[str, dict] = {}             # LSOA code -> {decile, pop, name}
+        self.G_cu = None                            # cuGraph graph (GPU BFS) when available
+        self.engine_backend = "networkx (CPU)"
         self.ready = False
 
     # --- one-time load (called at startup) ----------------------------------
@@ -57,10 +68,28 @@ class RippleEngine:
         self._attach_stops_to_nodes()
         self._load_lsoa()
         self._attach_stops_to_lsoa()
+        self._build_cugraph()
         self.ready = True
         print(f"[ripple] ready: {self.G.number_of_nodes()} nodes, "
               f"{self.G.number_of_edges()} edges, {len(self.stops)} stops, "
-              f"{len(self.lsoa)} LSOAs (deprivation+population)")
+              f"{len(self.lsoa)} LSOAs | BFS backend: {self.engine_backend}")
+
+    def _build_cugraph(self) -> None:
+        """Build the cuGraph graph for GPU BFS (no-op without RAPIDS → networkx CPU)."""
+        if not _HAS_CUGRAPH:
+            return
+        try:
+            edges = list(self.UG.edges())
+            df = cudf.DataFrame({"src": [int(u) for u, v in edges],
+                                 "dst": [int(v) for u, v in edges]})
+            gc = cugraph.Graph(directed=False)
+            gc.from_cudf_edgelist(df, source="src", destination="dst", renumber=True)
+            self.G_cu = gc
+            self.engine_backend = "cuGraph (GPU)"
+            print(f"[ripple] cuGraph built — GPU BFS enabled ({len(edges)} edges)")
+        except Exception as e:
+            print(f"[ripple] cuGraph build failed ({e}); using networkx CPU")
+            self.G_cu = None
 
     def _load_graph(self) -> None:
         if GRAPH_PATH.exists():
@@ -185,7 +214,12 @@ class RippleEngine:
         if not self.ready:
             return {"error": "engine not ready"}
         src = self.nearest_node(lat, lon)
-        reach = set(nx.single_source_shortest_path_length(self.UG, src, cutoff=hops).keys())
+        if self.G_cu is not None:  # GPU BFS via cuGraph
+            res = cugraph.bfs(self.G_cu, start=src)
+            res = res[res["distance"] <= hops]
+            reach = set(int(v) for v in res["vertex"].to_arrow().to_pylist())
+        else:                      # CPU BFS via networkx
+            reach = set(nx.single_source_shortest_path_length(self.UG, src, cutoff=hops).keys())
 
         affected = [s for s in self.stops if s.get("node") in reach]
         routes = sorted({r for s in affected for r in s["routes"]})
@@ -202,6 +236,7 @@ class RippleEngine:
         return {
             "disruption": {"lat": lat, "lon": lon},
             "hops": hops,
+            "engine": self.engine_backend,
             "affected_nodes": len(reach),
             "affected_stops": len(affected),
             "affected_routes": len(routes),
