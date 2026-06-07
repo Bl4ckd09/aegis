@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, geo, tfl
+from . import config, geo, smb, tfl
 from .briefing import BriefingGenerator
 from .detector import Detector
 from .disruptions import DisruptionPoller
@@ -168,21 +168,42 @@ class CascadeReq(BaseModel):
     hops: int = 15
 
 
-@app.post("/api/cascade")
-async def cascade(req: CascadeReq):
-    """Ripple a disruption out through the road graph; return the impact footprint.
-    Proxies to a remote GPU engine (cuGraph on Modal) if AEGIS_RIPPLE_URL is set,
-    else runs the local engine (cuGraph on the Spark / networkx CPU elsewhere)."""
+async def _cascade(lat: float, lon: float, hops: int) -> dict:
+    """The BFS catchment/cascade from a point — remote GPU engine (cuGraph on Modal)
+    if AEGIS_RIPPLE_URL is set, else the local engine (cuGraph on the Spark / CPU)."""
     if config.RIPPLE_URL:
-        try:
-            r = await state.client.post(config.RIPPLE_URL, json=req.model_dump(), timeout=300)
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"remote ripple failed: {e}")
+        r = await state.client.post(config.RIPPLE_URL,
+                                    json={"lat": lat, "lon": lon, "hops": hops}, timeout=300)
+        r.raise_for_status()
+        return r.json()
     if ripple is None or not ripple.engine.ready:
         raise HTTPException(status_code=503, detail="ripple engine not ready")
-    return await asyncio.to_thread(ripple.engine.cascade, req.lat, req.lon, req.hops)
+    return await asyncio.to_thread(ripple.engine.cascade, lat, lon, hops)
+
+
+@app.post("/api/cascade")
+async def cascade(req: CascadeReq):
+    """Ripple a disruption out through the road graph; return the impact footprint."""
+    try:
+        return await _cascade(req.lat, req.lon, req.hops)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"cascade failed: {e}")
+
+
+@app.post("/api/smb/exposure")
+async def smb_exposure(req: CascadeReq):
+    """SMB early-warning: the business's accessibility catchment (BFS) + live signals
+    (tube/rail + bus status, nearby road disruptions, weather) → attributed warnings."""
+    try:
+        catchment = await _cascade(req.lat, req.lon, req.hops)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"catchment failed: {e}")
+    disruptions = state.disruptions.disruptions if state.disruptions else []
+    return await smb.exposure(state.client, req.lat, req.lon, catchment, disruptions)
 
 
 @app.get("/api/ripple/status")

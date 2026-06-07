@@ -190,45 +190,53 @@ function buildLegend() {
   });
 }
 
-// --- Ripple: causal cascade (planning mode) ----------------------------
+// --- Ripple: SMB access-health exposure --------------------------------
 const rippleLayer = L.layerGroup().addTo(map);
 
-function renderCascadeImpact(r) {
-  const el = document.getElementById("cascade-impact");
+function healthColor(h) { return h >= 70 ? "#2ecc71" : h >= 40 ? "#f1c40f" : "#e74c3c"; }
+
+function renderExposure(r) {
+  const el = document.getElementById("exposure");
   if (!el) return;
-  const deprivedNames = (r.most_deprived || []).map((m) => m.name).join(", ");
+  const c = r.catchment || {};
+  const w = r.weather || {};
+  const reasons = (r.reasons || [])
+    .map((x) => `<li><span class="rz-icon">${x.icon}</span><span>${x.text}</span></li>`)
+    .join("");
   el.innerHTML = `
-    <div class="cascade-head"><b>${(r.est_daily_journeys || 0).toLocaleString()}</b> daily journeys affected</div>
-    <div class="cascade-head"><b>${(r.affected_population || 0).toLocaleString()}</b> residents in catchment</div>
-    <div class="cascade-row"><b>${r.deprived_lsoas || 0}</b> of ${r.affected_lsoas || 0} neighbourhoods in the most-deprived 20%</div>
-    ${deprivedNames ? `<div class="cascade-row deprived">⚠ ${deprivedNames}</div>` : ""}
-    <div class="cascade-row"><b>${(r.affected_nodes || 0).toLocaleString()}</b> junctions · <b>${r.affected_stops || 0}</b> stops · <b>${r.affected_routes || 0}</b> routes</div>
-    ${r.engine ? `<div class="cascade-engine">⚡ BFS on ${r.engine}</div>` : ""}`;
+    <div class="health" style="color:${healthColor(r.health)}">
+      <span class="health-num">${r.health}</span><span class="health-max">/100 access health</span>
+    </div>
+    <ul class="reasons">${reasons}</ul>
+    <div class="catch-row">Catchment: <b>${(c.population || 0).toLocaleString()}</b> residents ·
+      <b>${c.stops || 0}</b> bus stops · <b>${c.routes || 0}</b> routes${
+        w.temp != null ? ` · ${Math.round(w.temp)}°C` : ""}</div>
+    ${r.engine ? `<div class="cascade-engine">⚡ catchment via ${r.engine}</div>` : ""}`;
 }
 
-async function runCascade(lat, lon) {
-  const panel = document.getElementById("cascade-impact");
-  if (panel) panel.innerHTML = '<span class="muted small">computing cascade…</span>';
+async function runExposure(lat, lon) {
+  const panel = document.getElementById("exposure");
+  if (panel) panel.innerHTML = '<span class="muted small">checking live disruptions near you…</span>';
   rippleLayer.clearLayers();
   try {
-    const res = await fetch("/api/cascade", {
+    const res = await fetch("/api/smb/exposure", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lat, lon }),
     });
-    if (!res.ok) { if (panel) panel.innerHTML = '<span class="muted small">cascade engine still loading…</span>'; return; }
+    if (!res.ok) { if (panel) panel.innerHTML = '<span class="muted small">engine warming up — try again in a moment</span>'; return; }
     const r = await res.json();
     (r.ripple_points || []).forEach((p) =>
-      L.circleMarker([p.lat, p.lon], { radius: 2.5, weight: 0, fillColor: "#4ea1ff", fillOpacity: 0.35 }).addTo(rippleLayer));
-    L.circleMarker([lat, lon], { radius: 9, color: "#fff", weight: 2, fillColor: "#e74c3c", fillOpacity: 0.95 })
-      .addTo(rippleLayer).bindPopup("Disruption epicentre").openPopup();
-    renderCascadeImpact(r);
+      L.circleMarker([p.lat, p.lon], { radius: 2.5, weight: 0, fillColor: "#4ea1ff", fillOpacity: 0.3 }).addTo(rippleLayer));
+    L.circleMarker([lat, lon], { radius: 9, color: "#fff", weight: 3, fillColor: "#4ea1ff", fillOpacity: 1 })
+      .addTo(rippleLayer).bindPopup("Your business").openPopup();
+    renderExposure(r);
   } catch (e) {
-    if (panel) panel.innerHTML = '<span class="muted small">cascade failed</span>';
+    if (panel) panel.innerHTML = '<span class="muted small">exposure check failed</span>';
     console.error(e);
   }
 }
 
-map.on("click", (e) => runCascade(e.latlng.lat, e.latlng.lng));
+map.on("click", (e) => runExposure(e.latlng.lat, e.latlng.lng));
 
 // --- boot --------------------------------------------------------------
 buildLegend();

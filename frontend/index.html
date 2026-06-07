@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Aegis — London Traffic Incident HUD</title>
+  <title>Ripple — disruption early-warning for London businesses</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/style.css" />
 </head>
@@ -12,8 +12,8 @@
     <div class="brand">
       <span class="logo">▲</span>
       <div>
-        <h1>AEGIS</h1>
-        <span class="tagline">London traffic incident HUD · powered by NVIDIA</span>
+        <h1>RIPPLE</h1>
+        <span class="tagline">Disruption early-warning for London small businesses · powered by NVIDIA</span>
       </div>
     </div>
     <div id="status" class="status">
@@ -31,11 +31,11 @@
     <div id="map"></div>
 
     <aside id="sidebar">
-      <section class="card cascade">
-        <h2>Cascade impact — planning</h2>
-        <p class="muted small" id="cascade-hint">Click anywhere on the map to forecast a
-          disruption's downstream impact before it's approved.</p>
-        <div id="cascade-impact"></div>
+      <section class="card exposure">
+        <h2>Your business — access health</h2>
+        <p class="muted small" id="exposure-hint">Click your business location on the map to see
+          what's affecting access to it right now — tube, buses, roadworks and weather.</p>
+        <div id="exposure"></div>
       </section>
 
       <section class="card briefing">
