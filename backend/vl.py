@@ -1,13 +1,11 @@
 """Vision-language + text inference clients.
 
-Supports two serving backends so we can run on llama.cpp (preferred) or Ollama:
-  - "ollama":  native /api/chat (images[] + format schema)
-  - "openai":  /v1/chat/completions (image_url data URI + json_schema) — llama.cpp, vLLM, NIM
+OpenAI-compatible serving only — /v1/chat/completions (image_url data URI + json_schema),
+backed by vLLM / llama.cpp / NIM.
 
 Roles:
-  - classify_frame():    detector VLM  (config.VL_BACKEND)
-  - generate_briefing(): operator briefing, prefers NVIDIA Nemotron on llama.cpp
-                         (config.BRIEFING_BACKEND), with a fallback to the other backend.
+  - classify_frame():    detector VLM (vLLM nemotron-nano-vl at config.VL_OPENAI_URL)
+  - generate_briefing(): operator briefing (NVIDIA Nemotron on llama.cpp, config.BRIEFING_URL)
 
 Privacy is enforced in the prompt: describe road/traffic conditions in aggregate only —
 never people, never number plates, never re-identify a vehicle.
@@ -98,18 +96,6 @@ def _normalize(result: dict) -> Optional[dict]:
 
 
 # --- detector: classify one frame --------------------------------------------
-async def _classify_ollama(client: httpx.AsyncClient, b64: str) -> Optional[dict]:
-    payload = {
-        "model": config.VL_MODEL, "stream": False, "think": False,
-        "options": {"temperature": 0}, "format": CLASSIFY_SCHEMA,
-        "messages": [{"role": "user", "content": CLASSIFY_PROMPT, "images": [b64]}],
-    }
-    r = await client.post(f"{config.OLLAMA_URL}/api/chat", json=payload,
-                          timeout=config.VL_TIMEOUT_SECONDS)
-    r.raise_for_status()
-    return _extract_json(r.json().get("message", {}).get("content", ""))
-
-
 async def _classify_openai(client: httpx.AsyncClient, b64: str) -> Optional[dict]:
     payload = {
         "model": config.VL_MODEL, "temperature": 0, "max_tokens": 400, "stream": False,
@@ -130,10 +116,7 @@ async def classify_frame(client: httpx.AsyncClient, image_bytes: bytes) -> Optio
     """Classify one frame. Returns {category, confidence, description} or None on failure."""
     b64 = base64.b64encode(image_bytes).decode("ascii")
     try:
-        if config.VL_BACKEND == "openai":
-            result = await _classify_openai(client, b64)
-        else:
-            result = await _classify_ollama(client, b64)
+        result = await _classify_openai(client, b64)
     except Exception:
         return None
     return _normalize(result) if result else None
@@ -163,30 +146,10 @@ async def _briefing_openai(client: httpx.AsyncClient, prompt: str) -> Optional[s
     return r.json()["choices"][0]["message"]["content"].strip()
 
 
-async def _briefing_ollama(client: httpx.AsyncClient, prompt: str) -> Optional[str]:
-    payload = {
-        "model": config.VL_MODEL, "stream": False, "think": False,
-        "options": {"temperature": 0.3},
-        "messages": [{"role": "user", "content": prompt}],
-    }
-    r = await client.post(f"{config.OLLAMA_URL}/api/chat", json=payload,
-                          timeout=config.VL_TIMEOUT_SECONDS)
-    r.raise_for_status()
-    return r.json().get("message", {}).get("content", "").strip()
-
-
 async def generate_briefing(client: httpx.AsyncClient, summary_text: str) -> Optional[str]:
-    """Generate a control-room briefing. Prefers the configured backend, falls back."""
+    """Generate a control-room briefing via the Nemotron text model on llama.cpp."""
     prompt = _briefing_prompt(summary_text)
-    primary, fallback = (
-        (_briefing_openai, _briefing_ollama) if config.BRIEFING_BACKEND == "openai"
-        else (_briefing_ollama, _briefing_openai)
-    )
-    for fn in (primary, fallback):
-        try:
-            text = await fn(client, prompt)
-            if text:
-                return text
-        except Exception:
-            continue
-    return None
+    try:
+        return await _briefing_openai(client, prompt)
+    except Exception:
+        return None

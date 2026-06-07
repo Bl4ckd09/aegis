@@ -109,8 +109,8 @@ async def health():
     return {
         "status": "ok",
         "model": config.VL_MODEL,
-        "detector_backend": config.VL_BACKEND,
-        "briefing_model": config.BRIEFING_MODEL if config.BRIEFING_BACKEND == "openai" else config.VL_MODEL,
+        "detector_backend": "openai",
+        "briefing_model": config.BRIEFING_MODEL,
         "spatial_backend": geo.backend_name(),
         "cameras_total": len(state.cameras),
         "cameras_monitored": len(state.available),

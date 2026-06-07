@@ -5,17 +5,14 @@ import os
 from pathlib import Path
 
 # --- Perception VLM (the detector) ---
-# Backend: "ollama" (native /api/chat) or "openai" (llama.cpp / any OpenAI-compatible server).
-# We prefer serving on llama.cpp (OpenAI backend); Ollama qwen3.6 stays as the proven fallback.
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-VL_BACKEND = os.environ.get("AEGIS_VL_BACKEND", "ollama")          # "ollama" | "openai"
-VL_MODEL = os.environ.get("AEGIS_VL_MODEL", "qwen3.6")             # model tag/name
-VL_OPENAI_URL = os.environ.get("AEGIS_VL_OPENAI_URL", "http://localhost:8090/v1")  # llama.cpp VLM server
+# OpenAI-compatible serving only (vLLM / llama.cpp / any /v1 server). The VL model is
+# served by vLLM at :8090 as "nemotron-nano-vl".
+VL_MODEL = os.environ.get("AEGIS_VL_MODEL", "nemotron-nano-vl")    # served model name
+VL_OPENAI_URL = os.environ.get("AEGIS_VL_OPENAI_URL", "http://localhost:8090/v1")
 
-# --- Operator-briefing text model (prefer NVIDIA Nemotron on llama.cpp) ---
+# --- Operator-briefing text model (NVIDIA Nemotron on llama.cpp) ---
 # Nemotron-3-Nano-30B is served by llama.cpp at :30000 (OpenAI-compatible). It is a reasoning
 # model, so give it enough tokens for the think trace + answer; we read message.content.
-BRIEFING_BACKEND = os.environ.get("AEGIS_BRIEFING_BACKEND", "openai")  # "openai" | "ollama"
 BRIEFING_URL = os.environ.get("AEGIS_BRIEFING_URL", "http://localhost:30000/v1")
 BRIEFING_MODEL = os.environ.get("AEGIS_BRIEFING_MODEL", "nemotron-3-nano-30b")
 BRIEFING_MAX_TOKENS = int(os.environ.get("AEGIS_BRIEFING_MAX_TOKENS", "900"))
