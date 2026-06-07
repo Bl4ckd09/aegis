@@ -196,10 +196,13 @@ const rippleLayer = L.layerGroup().addTo(map);
 function renderCascadeImpact(r) {
   const el = document.getElementById("cascade-impact");
   if (!el) return;
+  const deprivedNames = (r.most_deprived || []).map((m) => m.name).join(", ");
   el.innerHTML = `
     <div class="cascade-head"><b>${(r.est_daily_journeys || 0).toLocaleString()}</b> daily journeys affected</div>
-    <div class="cascade-row"><b>${(r.affected_nodes || 0).toLocaleString()}</b> road junctions</div>
-    <div class="cascade-row"><b>${(r.affected_stops || 0).toLocaleString()}</b> bus stops · <b>${(r.affected_routes || 0)}</b> routes</div>`;
+    <div class="cascade-head"><b>${(r.affected_population || 0).toLocaleString()}</b> residents in catchment</div>
+    <div class="cascade-row"><b>${r.deprived_lsoas || 0}</b> of ${r.affected_lsoas || 0} neighbourhoods in the most-deprived 20%</div>
+    ${deprivedNames ? `<div class="cascade-row deprived">⚠ ${deprivedNames}</div>` : ""}
+    <div class="cascade-row"><b>${(r.affected_nodes || 0).toLocaleString()}</b> junctions · <b>${r.affected_stops || 0}</b> stops · <b>${r.affected_routes || 0}</b> routes</div>`;
 }
 
 async function runCascade(lat, lon) {
