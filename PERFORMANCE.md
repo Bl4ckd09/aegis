@@ -49,6 +49,37 @@ All requests returned HTTP 200 (0 errors across 296 requests). Cascade response 
 | `POST /api/smb/exposure` | ~7.8 s | 33 KB | cascade **+ external TfL/bus/weather APIs** — I/O-bound, not GPU |
 | `GET /api/highstreets` | ~11 ms | 118 KB | served from 120 s in-process cache (cold city-scale not isolated here) |
 
+## GPU vs CPU — controlled comparison (same graph, toggled `G_cu`)
+
+Measured in-process on the *same* loaded 21,908-node graph, switching only the BFS
+backend. Harness: [`scripts/benchmark_gpu_cpu.py`](scripts/benchmark_gpu_cpu.py).
+(GPU numbers required briefly stopping the VL server to free ~28 GB — the shared GB10
+could not host a *second* cuGraph context otherwise, which is itself a memory-pressure
+finding.)
+
+| Workload | GPU (cuGraph) | CPU (networkx) | Winner |
+|---|---:|---:|---|
+| **Single BFS cascade** (`_reach`, hops 15) | 27.6 ms | **0.10 ms** | **CPU ~275× faster** |
+| **Betweenness centrality** (global analytic) | **0.62 s** (k=500) | 6.81 s (k=150) | **GPU ~11× faster** (and with 3.3× more samples) |
+| **`highstreets()` cold** (batch BFS) | 311 / 874 / 1740 ms | ~27 / 72 / 37 ms | **CPU faster** at this scale |
+
+(`highstreets` columns are 10 / 30 / 60 disruption seeds. GPU cost ≈ 29 ms/seed — one
+kernel-launch + device→host transfer per `_reach`; CPU ≈ 0.1 ms/seed.)
+
+### The surprise: at this graph size, GPU BFS is *slower*
+
+The road graph (21,908 nodes / 50,554 edges) is small enough that **cuGraph's per-call
+overhead** (kernel launch, cuDF dataframe build, device→host copy ≈ 27 ms) **dwarfs the
+actual BFS**, while networkx with an early `cutoff` finishes in ~0.1 ms. GPU only wins on
+the **betweenness centrality** — a heavy all-shortest-paths analytic — where it's ~11×
+faster *and* samples 3.3× more vertices (k=500 vs 150), i.e. ~37× per normalized sample.
+
+Crucially, betweenness is **computed once at load and cached to disk** — so in steady
+state the GPU is doing the *one* job it loses at (per-query BFS) and none of the job it
+wins at. **And the per-query GPU BFS is exactly what causes the concurrency-cliff above:**
+N concurrent cuGraph contexts oversubscribe the shared device; N concurrent 0.1 ms CPU
+BFS would not.
+
 ## Key findings
 
 1. **Peak sustained throughput ≈ 9.3 req/s at concurrency 8**, p50 ≈ 0.8 s — the GPU
@@ -66,18 +97,31 @@ All requests returned HTTP 200 (0 errors across 296 requests). Cascade response 
 
 ## Recommendations
 
-- **Cap cascade concurrency at ~8** (semaphore / worker pool in front of
-  `ripple.engine.cascade`, or a bounded `asyncio` queue) so excess load queues instead of
-  collapsing the GPU. This keeps p95 < ~1.1 s under overload instead of 35 s.
-- For higher fan-out (city scale), prefer the **batched** `/api/highstreets` path over many
-  concurrent single cascades — batching amortizes graph setup far better than N parallel BFS.
-- Consider isolating the VL sweep cadence from interactive cascade traffic (or run cascades
-  on a CUDA stream priority) to remove the variance seen at concurrency 1.
+1. **Route per-query BFS (`_reach`) to CPU networkx at this graph size — highest-impact
+   change.** It is ~275× faster per call (0.1 ms vs 27.6 ms) *and* removes the GPU-context
+   oversubscription that causes the concurrency cliff. This very likely turns the 9.3 rps
+   ceiling + 35 s overload latency into a far higher, flat-latency profile, and frees the
+   GPU for the VL perception layer. (Re-validate against the live LSOA-aggregation /
+   serialization cost, which is the *other* part of the ~280 ms HTTP latency.)
+2. **Keep GPU only for the betweenness centrality build** (~11× faster, the one genuine
+   win) — already computed once at load and cached, so this costs nothing in steady state.
+3. **The GPU/CPU choice is graph-size-dependent.** cuGraph BFS would overtake CPU on a much
+   larger graph (full-resolution all-London, millions of nodes). Make the backend a config
+   toggle keyed on node count rather than just RAPIDS availability.
+4. If GPU BFS is retained, **cap cascade concurrency at ~8** (semaphore / bounded queue) so
+   excess load queues instead of collapsing the device (p95 < ~1.1 s vs 35 s).
+5. **Memory:** a second cuGraph context could not be allocated while vLLM + llama.cpp were
+   resident — the shared GB10 has no headroom for ad-hoc GPU work. The earlier vLLM
+   `0.40 → 0.25` change helped but the text + VL servers still dominate the 119 GiB.
 
 ## Reproduce
 
 ```bash
 cd ~/aegis
-./serverctl.sh start                  # backend on :8000
-.venv/bin/python scripts/benchmark_cascade.py   # writes /tmp/aegis_bench_results.json
+./serverctl.sh start                              # backend on :8000
+.venv/bin/python scripts/benchmark_cascade.py     # HTTP concurrency sweep
+# GPU-vs-CPU + cold city-scale (needs free GPU; stop the VL server first):
+bash vllm_serve.sh stop
+AEGIS_DATA_DIR="$PWD/data" PYTHONPATH="$PWD" .venv/bin/python scripts/benchmark_gpu_cpu.py
+bash vllm_serve.sh start                          # restore VL server (0.25 util)
 ```
