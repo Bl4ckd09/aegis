@@ -98,23 +98,29 @@ BFS would not.
 ## Validation — after routing per-query BFS to CPU (implemented)
 
 Recommendation 1 is now implemented (`AEGIS_RIPPLE_BFS=auto`, default CPU below 200k
-nodes; GPU reserved for the betweenness build). Re-running the identical concurrency sweep:
+nodes; GPU reserved for the betweenness build). Numbers below are a single **clean
+consolidated pass** (quieter box; GPU 31 % mean / 23 W during the cascade run — that load
+is the *other* tenants, since the cascade no longer touches the GPU):
 
-| Concurrency | Before (GPU BFS) | After (CPU BFS) | Δ throughput |
+| Concurrency | Before (GPU BFS) | After (CPU BFS, clean pass) | Δ throughput |
 |---:|---|---|---|
-| 1  | 0.41 rps · p50 2888 ms | **28.6 rps · p50 30 ms** | 70× |
-| 2  | 6.52 rps · p50 284 ms  | 16.8 rps · p50 60 ms   | 2.6× |
-| 4  | 8.05 rps · p50 526 ms  | 24.2 rps · p50 154 ms  | 3.0× |
-| 8  | 9.26 rps · p50 813 ms  | 23.8 rps · p50 307 ms  | 2.6× |
-| 16 | 1.04 rps · p50 11992 ms | **24.4 rps · p50 542 ms** | 23× |
-| 32 | 1.07 rps · p50 31257 ms | **23.8 rps · p50 1216 ms** | 22× |
+| 1  | 0.41 rps · p50 2888 ms | **26.2 rps · p50 42 ms** | 64× |
+| 2  | 6.52 rps · p50 284 ms  | 29.2 rps · p50 59 ms   | 4.5× |
+| 4  | 8.05 rps · p50 526 ms  | **39.2 rps · p50 99 ms**  | 4.9× |
+| 8  | 9.26 rps · p50 813 ms  | 35.2 rps · p50 194 ms  | 3.8× |
+| 16 | 1.04 rps · p50 11992 ms | **32.2 rps · p50 486 ms** | 31× |
+| 32 | 1.07 rps · p50 31257 ms | **33.0 rps · p50 809 ms** | 31× |
 
-**The saturation cliff is gone.** Throughput now plateaus flat at ~24 rps through
-concurrency 32 instead of collapsing to ~1 rps; overload p50 drops from 31 s to 1.2 s
-(~26×). The cascade no longer touches the GPU — the ~24 rps ceiling is now the single
-uvicorn process + `nearest_nodes` KDTree + JSON serialization (raise with more workers).
-`/api/ripple/status` reports `bfs_backend: "networkx (CPU)"`; betweenness still builds on
-GPU (`backend: "cuGraph (GPU)"`).
+**The saturation cliff is gone.** Throughput now plateaus flat at ~33–39 rps through
+concurrency 32 instead of collapsing to ~1 rps; overload p50 drops from 31 s to 0.8 s
+(~39×) and single-request latency from 2.9 s to ~42 ms. The cascade no longer touches the
+GPU — the ~35 rps ceiling is now the single uvicorn process + `nearest_nodes` KDTree + JSON
+serialization (raise with more workers). `/api/ripple/status` reports
+`bfs_backend: "networkx (CPU)"`; betweenness still builds on GPU (`backend: "cuGraph (GPU)"`).
+
+A re-run of the controlled GPU-vs-CPU comparison confirms the rationale holds (figures vary
+run-to-run with box load/warmup, conclusions do not): per-query BFS GPU 28–52 ms vs CPU
+~0.1 ms (CPU 250–500× faster); betweenness GPU 0.6–0.95 s vs CPU 6.8–9.7 s (~10–11×).
 
 ## Recommendations
 

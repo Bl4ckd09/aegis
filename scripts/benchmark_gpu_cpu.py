@@ -10,6 +10,11 @@ import time, statistics, json
 import networkx as nx
 
 from backend import ripple as R
+from backend import config
+
+# This harness compares GPU vs CPU directly, so force the engine to BUILD and KEEP the
+# cuGraph graph regardless of the production routing default (auto -> CPU frees G_cu).
+config.RIPPLE_BFS_BACKEND = "gpu"
 
 DEFAULT_HOPS = 15
 
