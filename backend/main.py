@@ -9,6 +9,7 @@ later phases and hang off the shared AppState created in the lifespan below.
 """
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from pathlib import Path
@@ -16,6 +17,7 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from . import config, geo, tfl
 from .briefing import BriefingGenerator
@@ -23,6 +25,12 @@ from .detector import Detector
 from .disruptions import DisruptionPoller
 from .models import Camera
 from .store import IncidentStore
+
+try:  # Ripple's graph stack (osmnx/networkx) may be absent on some boxes — degrade gracefully
+    from . import ripple
+except Exception as _e:  # pragma: no cover
+    ripple = None
+    print(f"[startup] Ripple engine unavailable: {_e}")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -74,6 +82,9 @@ async def lifespan(app: FastAPI):
     state.disruptions.start()
     state.briefing = BriefingGenerator(state, state.store)
     state.briefing.start()
+    if ripple is not None:  # load the road graph + stops in the background (cached → fast)
+        asyncio.create_task(asyncio.to_thread(ripple.engine.load))
+        print("[startup] ripple cascade engine loading in background...")
     try:
         yield
     finally:
@@ -147,6 +158,29 @@ async def disruptions():
          "lat": d.lat, "lon": d.lon, "comments": d.comments}
         for d in state.disruptions.disruptions if d.lat and d.lon
     ]
+
+
+class CascadeReq(BaseModel):
+    lat: float
+    lon: float
+    hops: int = 15
+
+
+@app.post("/api/cascade")
+async def cascade(req: CascadeReq):
+    """Ripple a disruption out through the road graph; return the impact footprint."""
+    if ripple is None or not ripple.engine.ready:
+        raise HTTPException(status_code=503, detail="ripple engine not ready")
+    return await asyncio.to_thread(ripple.engine.cascade, req.lat, req.lon, req.hops)
+
+
+@app.get("/api/ripple/status")
+async def ripple_status():
+    if ripple is None:
+        return {"available": False}
+    e = ripple.engine
+    return {"available": True, "ready": e.ready,
+            "nodes": e.G.number_of_nodes() if e.G else 0, "stops": len(e.stops)}
 
 
 @app.get("/api/cameras")
