@@ -30,6 +30,15 @@ DISRUPTION_URL = "https://api.tfl.gov.uk/Road/all/Disruption"
 # cuGraph service). Unset on the DGX Spark → the local engine runs (cuGraph on-box).
 RIPPLE_URL = os.environ.get("AEGIS_RIPPLE_URL", "")
 
+# Per-query BFS backend: "auto" | "cpu" | "gpu". Benchmarks (PERFORMANCE.md) show that
+# at our graph size a single cuGraph BFS (~27 ms kernel launch + device→host copy) is
+# ~275× slower than networkx with an early cutoff (~0.1 ms), and concurrent cuGraph BFS
+# oversubscribe the shared GPU. So per-query BFS defaults to CPU; the GPU is reserved for
+# the one-time betweenness build. "auto" uses GPU only above GPU_BFS_MIN_NODES, where
+# cuGraph's parallelism finally wins. Betweenness centrality always uses the GPU if present.
+RIPPLE_BFS_BACKEND = os.environ.get("AEGIS_RIPPLE_BFS", "auto").lower()   # auto|cpu|gpu
+RIPPLE_GPU_BFS_MIN_NODES = int(os.environ.get("AEGIS_RIPPLE_GPU_BFS_MIN_NODES", "200000"))
+
 # --- Detection loop ---
 # CAMERA_LIMIT caps the camera *universe* shown on the map (None = all ~795 available).
 # The detector classifies a ROLLING WINDOW over that universe: SWEEP_BATCH cameras every

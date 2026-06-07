@@ -245,6 +245,7 @@ async def ripple_status():
         return {"available": False}
     e = ripple.engine
     return {"available": True, "ready": e.ready, "backend": e.engine_backend,
+            "bfs_backend": e.bfs_backend,
             "nodes": e.G.number_of_nodes() if e.G else 0, "stops": len(e.stops)}
 
 

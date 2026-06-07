@@ -63,7 +63,8 @@ class RippleEngine:
         self.centrality: dict[int, float] = {}      # node -> betweenness percentile (0-1)
         self.lifelines: list[dict] = []             # top chokepoints by businesses depending on them
         self.G_cu = None                            # cuGraph graph (GPU BFS) when available
-        self.engine_backend = "networkx (CPU)"
+        self.engine_backend = "networkx (CPU)"      # how the graph/betweenness was built
+        self.bfs_backend = "networkx (CPU)"         # how per-query BFS (_reach) runs
         self.ready = False
 
     # --- one-time load (called at startup) ----------------------------------
@@ -75,12 +76,36 @@ class RippleEngine:
         self._attach_stops_to_lsoa()
         self._load_pois()
         self._build_cugraph()
-        self._build_centrality()
-        self._build_lifelines()
+        self._build_centrality()        # heavy global analytic — GPU if available
+        self._select_bfs_backend()      # decide per-query BFS path (frees GPU graph if CPU)
+        self._build_lifelines()         # one-time _reach×40 — now on the chosen backend
         self.ready = True
         print(f"[ripple] ready: {self.G.number_of_nodes()} nodes, "
               f"{self.G.number_of_edges()} edges, {len(self.stops)} stops, "
-              f"{len(self.lsoa)} LSOAs | BFS backend: {self.engine_backend}")
+              f"{len(self.lsoa)} LSOAs | build: {self.engine_backend} | "
+              f"per-query BFS: {self.bfs_backend}")
+
+    def _select_bfs_backend(self) -> None:
+        """Choose the per-query BFS backend (config-driven, keyed on graph size).
+
+        cuGraph wins only on large graphs; below RIPPLE_GPU_BFS_MIN_NODES, networkx is
+        far faster per query and avoids GPU oversubscription. When CPU is chosen we drop
+        the cuGraph graph reference to free GPU memory (betweenness is already built);
+        `_reach` then takes its networkx path via `self.G_cu is None`."""
+        n = self.G.number_of_nodes()
+        gpu_built = self.G_cu is not None
+        mode = config.RIPPLE_BFS_BACKEND
+        if mode == "gpu":
+            use_gpu = gpu_built
+        elif mode == "cpu":
+            use_gpu = False
+        else:  # auto
+            use_gpu = gpu_built and n >= config.RIPPLE_GPU_BFS_MIN_NODES
+        if not use_gpu and gpu_built:
+            self.G_cu = None  # release GPU graph → per-query BFS runs on CPU networkx
+            print(f"[ripple] per-query BFS → CPU networkx (n={n} < "
+                  f"{config.RIPPLE_GPU_BFS_MIN_NODES}, mode={mode}); cuGraph BFS graph freed")
+        self.bfs_backend = "cuGraph (GPU)" if (use_gpu and self.G_cu is not None) else "networkx (CPU)"
 
     def _build_cugraph(self) -> None:
         """Build the cuGraph graph for GPU BFS (no-op without RAPIDS → networkx CPU)."""
@@ -332,7 +357,7 @@ class RippleEngine:
         return {
             "disruption": {"lat": lat, "lon": lon},
             "hops": hops,
-            "engine": self.engine_backend,
+            "engine": self.bfs_backend,
             "affected_nodes": len(reach),
             "affected_stops": len(affected),
             "affected_routes": len(routes),
@@ -357,7 +382,7 @@ class RippleEngine:
         from collections import defaultdict
         transit_seeds = transit_seeds or []
         if not self.ready or not self.pois:
-            return {"areas": [], "ranked": [], "totals": {}, "engine": self.engine_backend}
+            return {"areas": [], "ranked": [], "totals": {}, "engine": self.bfs_backend}
 
         # batch the nearest-node lookups (one KDTree query, not one per seed)
         seeds = [(s, "road") for s in road_seeds if s.get("lat") and s.get("lon")] \
@@ -412,7 +437,7 @@ class RippleEngine:
                        "road_disruptions": len([s for s in road_seeds if s.get("lat")]),
                        "transit_points": len(transit_seeds),
                        "chokepoint_disruptions": len(chokepoints)},
-            "engine": self.engine_backend,
+            "engine": self.bfs_backend,
         }
 
 

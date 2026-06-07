@@ -95,10 +95,31 @@ BFS would not.
 4. **Not power-bound** (64 W peak): the bottleneck is GPU-context contention / serialization
    on the shared device, not compute headroom.
 
+## Validation — after routing per-query BFS to CPU (implemented)
+
+Recommendation 1 is now implemented (`AEGIS_RIPPLE_BFS=auto`, default CPU below 200k
+nodes; GPU reserved for the betweenness build). Re-running the identical concurrency sweep:
+
+| Concurrency | Before (GPU BFS) | After (CPU BFS) | Δ throughput |
+|---:|---|---|---|
+| 1  | 0.41 rps · p50 2888 ms | **28.6 rps · p50 30 ms** | 70× |
+| 2  | 6.52 rps · p50 284 ms  | 16.8 rps · p50 60 ms   | 2.6× |
+| 4  | 8.05 rps · p50 526 ms  | 24.2 rps · p50 154 ms  | 3.0× |
+| 8  | 9.26 rps · p50 813 ms  | 23.8 rps · p50 307 ms  | 2.6× |
+| 16 | 1.04 rps · p50 11992 ms | **24.4 rps · p50 542 ms** | 23× |
+| 32 | 1.07 rps · p50 31257 ms | **23.8 rps · p50 1216 ms** | 22× |
+
+**The saturation cliff is gone.** Throughput now plateaus flat at ~24 rps through
+concurrency 32 instead of collapsing to ~1 rps; overload p50 drops from 31 s to 1.2 s
+(~26×). The cascade no longer touches the GPU — the ~24 rps ceiling is now the single
+uvicorn process + `nearest_nodes` KDTree + JSON serialization (raise with more workers).
+`/api/ripple/status` reports `bfs_backend: "networkx (CPU)"`; betweenness still builds on
+GPU (`backend: "cuGraph (GPU)"`).
+
 ## Recommendations
 
-1. **Route per-query BFS (`_reach`) to CPU networkx at this graph size — highest-impact
-   change.** It is ~275× faster per call (0.1 ms vs 27.6 ms) *and* removes the GPU-context
+1. ~~**Route per-query BFS (`_reach`) to CPU networkx at this graph size.**~~ **DONE** — see
+   Validation above (2.6× peak throughput, ~26× better overload latency, cliff removed). It is ~275× faster per call (0.1 ms vs 27.6 ms) *and* removes the GPU-context
    oversubscription that causes the concurrency cliff. This very likely turns the 9.3 rps
    ceiling + 35 s overload latency into a far higher, flat-latency profile, and frees the
    GPU for the VL perception layer. (Re-validate against the live LSOA-aggregation /
