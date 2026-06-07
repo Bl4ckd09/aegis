@@ -73,6 +73,13 @@ main { flex: 1; display: flex; min-height: 0; }
 .nv-role { color: var(--muted); }
 .nv-val { color: var(--text); text-align: right; font-weight: 600; }
 
+/* London high-streets (collective) panel */
+.card.highstreets h2 { color: #76b900; }
+.hs-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.hs-list li { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+.hs-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hs-hit { color: var(--muted); flex: 0 0 auto; }
+
 /* SMB exposure panel */
 .card.exposure h2 { color: #4ea1ff; }
 #exposure { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }

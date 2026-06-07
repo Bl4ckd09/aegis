@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import time
 from pathlib import Path
 
 import httpx
@@ -204,6 +205,37 @@ async def smb_exposure(req: CascadeReq):
         raise HTTPException(status_code=502, detail=f"catchment failed: {e}")
     disruptions = state.disruptions.disruptions if state.disruptions else []
     return await smb.exposure(state.client, req.lat, req.lon, catchment, disruptions)
+
+
+_highstreets_cache = {"data": None, "ts": 0.0}
+
+
+@app.get("/api/highstreets")
+async def highstreets():
+    """City-scale collective view: batch-cascade today's live disruptions over all
+    high-street businesses → access health per high street, deprivation-weighted."""
+    now = time.monotonic()
+    if _highstreets_cache["data"] and now - _highstreets_cache["ts"] < 120:
+        return _highstreets_cache["data"]
+    disruptions = [{"lat": d.lat, "lon": d.lon}
+                   for d in (state.disruptions.disruptions if state.disruptions else [])
+                   if d.lat and d.lon]
+    try:
+        if config.RIPPLE_URL:
+            url = config.RIPPLE_URL.replace("ripple-cascade", "ripple-highstreets")
+            r = await state.client.post(url, json={"disruptions": disruptions, "hops": 12}, timeout=300)
+            r.raise_for_status()
+            data = r.json()
+        elif ripple is not None and ripple.engine.ready:
+            data = await asyncio.to_thread(ripple.engine.highstreets, disruptions, 12)
+        else:
+            raise HTTPException(status_code=503, detail="ripple engine not ready")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"highstreets failed: {e}")
+    _highstreets_cache.update(data=data, ts=now)
+    return data
 
 
 @app.get("/api/ripple/status")

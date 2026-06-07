@@ -37,6 +37,7 @@ RIPPLE_DIR = config.DATA_DIR / "ripple"
 RIPPLE_DIR.mkdir(parents=True, exist_ok=True)
 GRAPH_PATH = RIPPLE_DIR / "graph.graphml"
 STOPS_PATH = RIPPLE_DIR / "stops.json"
+POIS_PATH = RIPPLE_DIR / "pois.json"
 IMD_PATH = RIPPLE_DIR / "imd_london.xlsx"
 IMD_URL = ("https://data.london.gov.uk/download/2l15g/"
            "9ee0cf66-e6f9-4e38-8eec-79c1d897e248/ID%202019%20for%20London.xlsx")
@@ -57,6 +58,7 @@ class RippleEngine:
         self.UG: Optional[nx.Graph] = None          # undirected, for reachability BFS
         self.stops: list[dict] = []                 # {lat, lon, name, routes:[...], node, lsoa}
         self.lsoa: dict[str, dict] = {}             # LSOA code -> {decile, pop, name}
+        self.pois: list[dict] = []                  # high-street businesses {lat,lon,name,node,lsoa}
         self.G_cu = None                            # cuGraph graph (GPU BFS) when available
         self.engine_backend = "networkx (CPU)"
         self.ready = False
@@ -68,6 +70,7 @@ class RippleEngine:
         self._attach_stops_to_nodes()
         self._load_lsoa()
         self._attach_stops_to_lsoa()
+        self._load_pois()
         self._build_cugraph()
         self.ready = True
         print(f"[ripple] ready: {self.G.number_of_nodes()} nodes, "
@@ -205,21 +208,62 @@ class RippleEngine:
         matched = sum(1 for s in self.stops if s.get("lsoa") in self.lsoa)
         print(f"[ripple] attached LSOA to stops ({matched} matched)")
 
+    def _load_pois(self) -> None:
+        """High-street businesses (OSM shops + hospitality) → nearest road node + LSOA."""
+        if POIS_PATH.exists():
+            self.pois = json.loads(POIS_PATH.read_text())
+            return
+        try:
+            tags = {"shop": True,
+                    "amenity": ["restaurant", "cafe", "pub", "bar", "fast_food", "bakery"]}
+            gdf = ox.features_from_point((CENTER_LAT, CENTER_LON), tags, dist=RADIUS_M)
+            pois = []
+            for _, row in gdf.iterrows():
+                geom = row.get("geometry")
+                if geom is None:
+                    continue
+                c = geom.centroid
+                nm = row.get("name")
+                pois.append({"lat": float(c.y), "lon": float(c.x),
+                             "name": nm if isinstance(nm, str) else None})
+            self.pois = pois
+        except Exception as e:
+            print(f"[ripple] POI load failed ({e}) — high-street layer disabled")
+            self.pois = []
+            return
+        if self.pois:
+            nn = ox.distance.nearest_nodes(self.G, [p["lon"] for p in self.pois],
+                                           [p["lat"] for p in self.pois])
+            for p, n in zip(self.pois, nn):
+                p["node"] = int(n)
+            stops_with = [s for s in self.stops if s.get("lsoa")]
+            if stops_with:
+                from scipy.spatial import cKDTree
+                tree = cKDTree([(s["lat"], s["lon"]) for s in stops_with])
+                _, idx = tree.query([(p["lat"], p["lon"]) for p in self.pois])
+                for p, i in zip(self.pois, idx):
+                    p["lsoa"] = stops_with[int(i)]["lsoa"]
+        POIS_PATH.write_text(json.dumps(self.pois))
+        print(f"[ripple] loaded {len(self.pois)} high-street businesses (POIs)")
+
     # --- the cascade ---------------------------------------------------------
     def nearest_node(self, lat: float, lon: float) -> int:
         return int(ox.distance.nearest_nodes(self.G, lon, lat))
+
+    def _reach(self, src: int, hops: int) -> set:
+        """BFS reachable set within `hops` — cuGraph on GPU, networkx CPU fallback."""
+        if self.G_cu is not None:
+            res = cugraph.bfs(self.G_cu, start=src)
+            res = res[res["distance"] <= hops]
+            return set(int(v) for v in res["vertex"].to_arrow().to_pylist())
+        return set(nx.single_source_shortest_path_length(self.UG, src, cutoff=hops).keys())
 
     def cascade(self, lat: float, lon: float, hops: int = DEFAULT_HOPS) -> dict:
         """Ripple out from a disruption point; return the impact footprint."""
         if not self.ready:
             return {"error": "engine not ready"}
         src = self.nearest_node(lat, lon)
-        if self.G_cu is not None:  # GPU BFS via cuGraph
-            res = cugraph.bfs(self.G_cu, start=src)
-            res = res[res["distance"] <= hops]
-            reach = set(int(v) for v in res["vertex"].to_arrow().to_pylist())
-        else:                      # CPU BFS via networkx
-            reach = set(nx.single_source_shortest_path_length(self.UG, src, cutoff=hops).keys())
+        reach = self._reach(src, hops)
 
         affected = [s for s in self.stops if s.get("node") in reach]
         routes = sorted({r for s in affected for r in s["routes"]})
@@ -248,6 +292,46 @@ class RippleEngine:
             "most_deprived": most_deprived,
             "stops": [{"lat": s["lat"], "lon": s["lon"], "name": s["name"]} for s in affected],
             "ripple_points": pts,
+        }
+
+
+    def highstreets(self, disruptions: list[dict], hops: int = 12) -> dict:
+        """City-scale collective view: batch-cascade today's live disruptions over the
+        graph (GPU) and aggregate access health per LSOA high street, weighted by
+        deprivation. This is where the graph BFS + GPU genuinely earn their keep."""
+        from collections import defaultdict
+        if not self.ready or not self.pois:
+            return {"areas": [], "ranked": [], "totals": {}, "engine": self.engine_backend}
+        affected = set()
+        for d in disruptions:
+            if d.get("lat") and d.get("lon"):
+                affected |= self._reach(self.nearest_node(d["lat"], d["lon"]), hops)
+        agg = defaultdict(lambda: {"total": 0, "affected": 0, "slat": 0.0, "slon": 0.0})
+        for p in self.pois:
+            code = p.get("lsoa")
+            if code not in self.lsoa:
+                continue
+            a = agg[code]
+            a["total"] += 1; a["slat"] += p["lat"]; a["slon"] += p["lon"]
+            if p.get("node") in affected:
+                a["affected"] += 1
+        areas = []
+        for code, a in agg.items():
+            L = self.lsoa[code]
+            areas.append({"code": code, "name": L["name"], "decile": L["decile"], "pop": L["pop"],
+                          "lat": a["slat"] / a["total"], "lon": a["slon"] / a["total"],
+                          "total": a["total"], "affected": a["affected"],
+                          "health": round(100 * (1 - a["affected"] / a["total"]))})
+        ranked = sorted([x for x in areas if x["affected"] > 0],
+                        key=lambda x: (x["affected"], -x["decile"]), reverse=True)[:12]
+        return {
+            "areas": areas,
+            "ranked": ranked,
+            "totals": {"businesses": sum(x["total"] for x in areas),
+                       "affected": sum(x["affected"] for x in areas),
+                       "deprived_affected": sum(x["affected"] for x in areas if x["decile"] <= 2),
+                       "disruptions": len(disruptions)},
+            "engine": self.engine_backend,
         }
 
 

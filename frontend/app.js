@@ -238,8 +238,42 @@ async function runExposure(lat, lon) {
 
 map.on("click", (e) => runExposure(e.latlng.lat, e.latlng.lng));
 
+// --- collective: London high-street access health (the city-scale view) -
+const hsLayer = L.layerGroup().addTo(map);
+
+function renderHighstreets(d) {
+  const t = d.totals || {};
+  const sum = document.getElementById("hs-summary");
+  if (sum) sum.innerHTML =
+    `<b>${(t.affected || 0).toLocaleString()}</b> of ${(t.businesses || 0).toLocaleString()} high-street ` +
+    `businesses access-impaired by <b>${t.disruptions || 0}</b> live disruptions — ` +
+    `<b style="color:#ffc36b">${(t.deprived_affected || 0).toLocaleString()}</b> in the most-deprived high streets.`;
+  const list = document.getElementById("hs-list");
+  if (list) list.innerHTML = (d.ranked || [])
+    .map((x) => `<li><span class="hs-name">${x.name}</span><span class="hs-hit">${x.affected} hit · IMD ${x.decile}</span></li>`)
+    .join("");
+  hsLayer.clearLayers();
+  (d.areas || []).forEach((a) => {
+    if (a.total < 10) return;
+    L.circleMarker([a.lat, a.lon], {
+      radius: Math.min(18, 4 + Math.sqrt(a.total)),
+      fillColor: healthColor(a.health), color: healthColor(a.health),
+      weight: 0, fillOpacity: a.affected > 0 ? 0.55 : 0.12,
+    }).addTo(hsLayer).bindPopup(`${a.name}<br>${a.affected}/${a.total} businesses impaired · IMD decile ${a.decile}`);
+  });
+}
+
+async function loadHighstreets() {
+  try {
+    const r = await fetch("/api/highstreets");
+    if (r.ok) renderHighstreets(await r.json());
+  } catch (e) { console.error(e); }
+}
+
 // --- boot --------------------------------------------------------------
 buildLegend();
+loadHighstreets();
+setInterval(loadHighstreets, 120000);
 loadCameras().catch((e) => {
   document.getElementById("status-text").textContent = "failed to load cameras";
   console.error(e);

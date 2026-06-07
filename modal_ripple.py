@@ -48,6 +48,10 @@ class Ripple:
     def cascade(self, data: dict):
         return self.engine.cascade(data["lat"], data["lon"], data.get("hops", 15))
 
+    @modal.fastapi_endpoint(method="POST")
+    def highstreets(self, data: dict):
+        return self.engine.highstreets(data.get("disruptions", []), data.get("hops", 12))
+
     @modal.fastapi_endpoint(method="GET")
     def status(self):
         e = self.engine
