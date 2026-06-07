@@ -295,33 +295,52 @@ class RippleEngine:
         }
 
 
-    def highstreets(self, disruptions: list[dict], hops: int = 12) -> dict:
-        """City-scale collective view: batch-cascade today's live disruptions over the
-        graph (GPU) and aggregate access health per LSOA high street, weighted by
-        deprivation. This is where the graph BFS + GPU genuinely earn their keep."""
+    def highstreets(self, road_seeds: list[dict], transit_seeds: list[dict] | None = None,
+                    hops_base: int = 8) -> dict:
+        """City-scale collective view, multi-modal + severity-weighted:
+          • road disruptions → full BFS cascade (GPU), radius scaled by severity
+          • tube/bus disruptions → mark the affected station/stop node + 1-hop nbrs (local)
+        Aggregate severity-weighted access health per LSOA high street, deprivation-weighted.
+        This is where the graph BFS + GPU genuinely earn their keep."""
         from collections import defaultdict
+        transit_seeds = transit_seeds or []
         if not self.ready or not self.pois:
             return {"areas": [], "ranked": [], "totals": {}, "engine": self.engine_backend}
-        affected = set()
-        for d in disruptions:
-            if d.get("lat") and d.get("lon"):
-                affected |= self._reach(self.nearest_node(d["lat"], d["lon"]), hops)
-        agg = defaultdict(lambda: {"total": 0, "affected": 0, "slat": 0.0, "slon": 0.0})
+
+        # batch the nearest-node lookups (one KDTree query, not one per seed)
+        seeds = [(s, "road") for s in road_seeds if s.get("lat") and s.get("lon")] \
+            + [(s, "transit") for s in transit_seeds if s.get("lat") and s.get("lon")]
+        node_weight: dict[int, float] = {}
+        if seeds:
+            nodes = ox.distance.nearest_nodes(self.G, [s["lon"] for s, _ in seeds],
+                                              [s["lat"] for s, _ in seeds])
+            for (s, kind), n in zip(seeds, nodes):
+                w = float(s.get("weight", 0.5))
+                if kind == "road":   # network ripple, severity-scaled radius
+                    hit = self._reach(int(n), max(4, round(hops_base * (0.5 + w))))
+                else:                # transit: local impairment around the stop/station
+                    hit = [int(n), *self.UG.neighbors(int(n))]
+                for m in hit:
+                    if node_weight.get(m, 0) < w:
+                        node_weight[m] = w
+
+        agg = defaultdict(lambda: {"total": 0, "affected": 0, "wsum": 0.0, "slat": 0.0, "slon": 0.0})
         for p in self.pois:
             code = p.get("lsoa")
             if code not in self.lsoa:
                 continue
             a = agg[code]
             a["total"] += 1; a["slat"] += p["lat"]; a["slon"] += p["lon"]
-            if p.get("node") in affected:
-                a["affected"] += 1
+            w = node_weight.get(p.get("node"), 0)
+            if w > 0:
+                a["affected"] += 1; a["wsum"] += w
         areas = []
         for code, a in agg.items():
             L = self.lsoa[code]
             areas.append({"code": code, "name": L["name"], "decile": L["decile"], "pop": L["pop"],
                           "lat": a["slat"] / a["total"], "lon": a["slon"] / a["total"],
                           "total": a["total"], "affected": a["affected"],
-                          "health": round(100 * (1 - a["affected"] / a["total"]))})
+                          "health": round(100 * (1 - min(1.0, a["wsum"] / a["total"])))})
         ranked = sorted([x for x in areas if x["affected"] > 0],
                         key=lambda x: (x["affected"], -x["decile"]), reverse=True)[:12]
         return {
@@ -330,7 +349,8 @@ class RippleEngine:
             "totals": {"businesses": sum(x["total"] for x in areas),
                        "affected": sum(x["affected"] for x in areas),
                        "deprived_affected": sum(x["affected"] for x in areas if x["decile"] <= 2),
-                       "disruptions": len(disruptions)},
+                       "road_disruptions": len([s for s in road_seeds if s.get("lat")]),
+                       "transit_points": len(transit_seeds)},
             "engine": self.engine_backend,
         }
 

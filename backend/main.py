@@ -217,17 +217,18 @@ async def highstreets():
     now = time.monotonic()
     if _highstreets_cache["data"] and now - _highstreets_cache["ts"] < 120:
         return _highstreets_cache["data"]
-    disruptions = [{"lat": d.lat, "lon": d.lon}
-                   for d in (state.disruptions.disruptions if state.disruptions else [])
-                   if d.lat and d.lon]
+    road_disruptions = state.disruptions.disruptions if state.disruptions else []
+    road_seeds, transit_seeds, _ = await smb.collective_seeds(state.client, road_disruptions)
     try:
         if config.RIPPLE_URL:
             url = config.RIPPLE_URL.replace("ripple-cascade", "ripple-highstreets")
-            r = await state.client.post(url, json={"disruptions": disruptions, "hops": 12}, timeout=300)
+            r = await state.client.post(url, json={"road_seeds": road_seeds,
+                                                   "transit_seeds": transit_seeds,
+                                                   "hops_base": 8}, timeout=300)
             r.raise_for_status()
             data = r.json()
         elif ripple is not None and ripple.engine.ready:
-            data = await asyncio.to_thread(ripple.engine.highstreets, disruptions, 12)
+            data = await asyncio.to_thread(ripple.engine.highstreets, road_seeds, transit_seeds, 8)
         else:
             raise HTTPException(status_code=503, detail="ripple engine not ready")
     except HTTPException:

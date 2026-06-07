@@ -246,7 +246,7 @@ function renderHighstreets(d) {
   const sum = document.getElementById("hs-summary");
   if (sum) sum.innerHTML =
     `<b>${(t.affected || 0).toLocaleString()}</b> of ${(t.businesses || 0).toLocaleString()} high-street ` +
-    `businesses access-impaired by <b>${t.disruptions || 0}</b> live disruptions — ` +
+    `businesses access-impaired by today's live <b>road, tube &amp; bus</b> disruptions — ` +
     `<b style="color:#ffc36b">${(t.deprived_affected || 0).toLocaleString()}</b> in the most-deprived high streets.`;
   const list = document.getElementById("hs-list");
   if (list) list.innerHTML = (d.ranked || [])

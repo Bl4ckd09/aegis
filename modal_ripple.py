@@ -50,7 +50,9 @@ class Ripple:
 
     @modal.fastapi_endpoint(method="POST")
     def highstreets(self, data: dict):
-        return self.engine.highstreets(data.get("disruptions", []), data.get("hops", 12))
+        return self.engine.highstreets(data.get("road_seeds", []),
+                                       data.get("transit_seeds", []),
+                                       data.get("hops_base", 8))
 
     @modal.fastapi_endpoint(method="GET")
     def status(self):

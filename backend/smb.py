@@ -11,12 +11,35 @@ from __future__ import annotations
 
 import asyncio
 import math
+import os
 
 from . import config
 
 # Rail-ish modes whose live status matters to a high-street catchment.
 RAIL_MODES = "tube,dlr,overground,elizabeth-line"
 TFL = "https://api.tfl.gov.uk"
+
+# Graph area (matches ripple.py) — to keep collective seeds inside London.
+RIPPLE_LAT = float(os.environ.get("AEGIS_RIPPLE_LAT", "51.5074"))
+RIPPLE_LON = float(os.environ.get("AEGIS_RIPPLE_LON", "-0.1278"))
+RIPPLE_RADIUS = int(os.environ.get("AEGIS_RIPPLE_RADIUS", "6000"))
+
+_ROAD_W = {"severe": 1.0, "serious": 1.0, "moderate": 0.6,
+           "minimal": 0.3, "low": 0.3, "works": 0.4}
+_LINE_STOPS_CACHE: dict[str, list[dict]] = {}
+
+
+def _road_weight(sev: str | None) -> float:
+    return _ROAD_W.get((sev or "").strip().lower(), 0.5)
+
+
+def _line_weight(status_severity) -> float:
+    s = status_severity if status_severity is not None else 10
+    if s <= 6:    # suspended / part-suspended / severe delays
+        return 1.0
+    if s <= 9:    # minor delays / special service / reduced service
+        return 0.6
+    return 0.0    # good service
 
 
 def _key(sep: str) -> str:
@@ -131,6 +154,53 @@ def _cascade_effect(lat: float, lon: float, pts: list[dict], roads: list[dict]) 
         if best is None or pct > best["pct"]:
             best = {"category": road["category"], "dist_m": road["dist_m"], "pct": pct}
     return best if best and best["pct"] >= 3 else None
+
+
+async def _line_stops(client, line_id: str) -> list[dict]:
+    """Stops/stations on a TfL line (cached per line id)."""
+    if line_id in _LINE_STOPS_CACHE:
+        return _LINE_STOPS_CACHE[line_id]
+    try:
+        sp = (await client.get(f"{TFL}/Line/{line_id}/StopPoints{_key('?')}")).json()
+        stops = [{"lat": s["lat"], "lon": s["lon"]} for s in sp if s.get("lat") and s.get("lon")]
+    except Exception:
+        stops = []
+    _LINE_STOPS_CACHE[line_id] = stops
+    return stops
+
+
+async def collective_seeds(client, road_disruptions) -> tuple[list[dict], list[dict], int]:
+    """Assemble severity-weighted disruption seeds for the city-scale batch cascade:
+    road disruptions (→ network cascade) + stops/stations of disrupted tube/rail/bus
+    lines (→ local impairment). Returns (road_seeds, transit_seeds, n_disrupted_lines)."""
+    road = [{"lat": d.lat, "lon": d.lon, "weight": _road_weight(d.severity)}
+            for d in (road_disruptions or []) if d.lat and d.lon]
+
+    async def _status(modes):
+        try:
+            return (await client.get(f"{TFL}/Line/Mode/{modes}/Status{_key('?')}")).json()
+        except Exception:
+            return []
+    rail, bus = await asyncio.gather(_status(RAIL_MODES), _status("bus"))
+
+    disrupted: list[tuple[str, float]] = []
+    for l in rail if isinstance(rail, list) else []:
+        w = _line_weight((l.get("lineStatuses") or [{}])[0].get("statusSeverity", 10))
+        if w > 0 and l.get("id"):
+            disrupted.append((l["id"], w))
+    bus_d = [(l.get("id"), _line_weight((l.get("lineStatuses") or [{}])[0].get("statusSeverity", 10)))
+             for l in (bus if isinstance(bus, list) else [])]
+    bus_d = [(i, w) for i, w in bus_d if i and w > 0]
+    bus_d.sort(key=lambda x: -x[1])
+    disrupted += bus_d[:30]   # cap worst-30 bus routes to bound the expansion
+
+    stop_lists = await asyncio.gather(*[_line_stops(client, lid) for lid, _ in disrupted])
+    transit = []
+    for (lid, w), stops in zip(disrupted, stop_lists):
+        for s in stops:
+            if _haversine_m(RIPPLE_LAT, RIPPLE_LON, s["lat"], s["lon"]) <= RIPPLE_RADIUS:
+                transit.append({"lat": s["lat"], "lon": s["lon"], "weight": w})
+    return road, transit, len(disrupted)
 
 
 async def exposure(client, lat: float, lon: float, catchment: dict, disruptions) -> dict:
