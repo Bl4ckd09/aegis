@@ -169,6 +169,12 @@ async function pollHealth() {
     const scanned = h.scanned != null ? ` · ${h.scanned}/${h.cameras_monitored} scanned` : "";
     document.getElementById("status-text").textContent =
       `${h.model} · ${h.cameras_monitored} cameras${scanned}` + (h.replay_mode ? " · REPLAY" : "");
+    // NVIDIA stack panel
+    const beLabel = { openai: "vLLM", ollama: "Ollama" }[h.detector_backend] || h.detector_backend;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set("nv-detector", `${h.model} · ${beLabel}`);
+    set("nv-briefing", h.briefing_model || "—");
+    set("nv-spatial", (h.spatial_backend || "—").replace(" (GPU)", " · GPU").replace(" (CPU)", " · CPU"));
   } catch (e) {
     document.getElementById("health-dot").className = "dot bad";
     document.getElementById("status-text").textContent = "backend offline";

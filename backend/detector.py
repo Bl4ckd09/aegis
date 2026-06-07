@@ -27,7 +27,7 @@ class Detector:
         async with self.sem:
             if self._stop:
                 return
-            img = await tfl.fetch_image(self.state.client, cam.image_url)
+            img = await tfl.get_frame(self.state.client, cam)
             if not img:
                 return
             result = await vl.classify_frame(self.state.client, img)

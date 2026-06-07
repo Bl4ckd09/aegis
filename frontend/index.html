@@ -13,7 +13,7 @@
       <span class="logo">▲</span>
       <div>
         <h1>AEGIS</h1>
-        <span class="tagline">London traffic incident HUD · local VL on DGX Spark</span>
+        <span class="tagline">London traffic incident HUD · powered by NVIDIA</span>
       </div>
     </div>
     <div id="status" class="status">
@@ -37,6 +37,15 @@
         <span id="briefing-time" class="timestamp"></span>
       </section>
 
+      <section class="card nvidia">
+        <h2>NVIDIA stack</h2>
+        <ul id="nvidia-stack" class="nv-list">
+          <li><span class="nv-role">Perception</span><span id="nv-detector" class="nv-val">…</span></li>
+          <li><span class="nv-role">Briefing</span><span id="nv-briefing" class="nv-val">…</span></li>
+          <li><span class="nv-role">Spatial join</span><span id="nv-spatial" class="nv-val">…</span></li>
+        </ul>
+      </section>
+
       <section class="card legend">
         <h2>Legend</h2>
         <ul id="legend-list"></ul>
@@ -58,7 +67,8 @@
           Aegis classifies road and traffic conditions only. It performs
           <strong>no facial recognition</strong>, <strong>no number-plate reading</strong>,
           and <strong>no tracking</strong> of any individual or vehicle across frames.
-          All inference runs locally on the Spark; no images leave the premises.
+          Frames are classified in aggregate and not retained. On the DGX Spark this runs
+          fully on-premises — no images leave the building.
         </p>
       </section>
     </aside>

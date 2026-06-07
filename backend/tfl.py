@@ -1,6 +1,13 @@
-"""TfL open-data client: JamCam list, camera frames, road disruptions."""
+"""TfL open-data client: JamCam list, camera frames, road disruptions.
+
+Supports an offline REPLAY mode (config.REPLAY_MODE): cameras, frames and
+disruptions are served from a saved snapshot on disk (data/snapshots/) so the
+demo runs with zero network — insurance against a flaky venue connection.
+Capture a snapshot while live with `python -m scripts.snapshot`.
+"""
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 import httpx
@@ -24,7 +31,14 @@ def _props(cam: dict) -> dict:
 
 
 async def fetch_cameras(client: httpx.AsyncClient) -> list[Camera]:
-    """GET the JamCam list and normalize into Camera objects."""
+    """Monitored cameras — from the saved snapshot in replay mode, else live TfL."""
+    if config.REPLAY_MODE:
+        data = json.loads((config.SNAPSHOT_DIR / "cameras.json").read_text())
+        return [
+            Camera(id=c["id"], name=c.get("name", c["id"]), lat=c["lat"], lon=c["lon"],
+                   view=c.get("view"), available=True, image_url=None)
+            for c in data
+        ]
     r = await client.get(config.JAMCAM_LIST_URL, params=_params(), timeout=30)
     r.raise_for_status()
     cameras: list[Camera] = []
@@ -48,7 +62,7 @@ async def fetch_cameras(client: httpx.AsyncClient) -> list[Camera]:
 
 
 async def fetch_image(client: httpx.AsyncClient, url: str) -> Optional[bytes]:
-    """Fetch a single camera JPEG. Returns None on any failure."""
+    """Fetch a single camera JPEG by URL. Returns None on any failure."""
     try:
         r = await client.get(url, timeout=30)
         r.raise_for_status()
@@ -57,8 +71,26 @@ async def fetch_image(client: httpx.AsyncClient, url: str) -> Optional[bytes]:
         return None
 
 
+async def get_frame(client: httpx.AsyncClient, cam: Camera) -> Optional[bytes]:
+    """A camera's current JPEG — from the snapshot in replay mode, else live."""
+    if config.REPLAY_MODE:
+        try:
+            return (config.SNAPSHOT_DIR / "frames" / f"{cam.id}.jpg").read_bytes()
+        except OSError:
+            return None
+    if not cam.image_url:
+        return None
+    return await fetch_image(client, cam.image_url)
+
+
 async def fetch_disruptions(client: httpx.AsyncClient) -> list[Disruption]:
-    """GET the official road-disruption feed and normalize."""
+    """Official road disruptions — from the saved snapshot in replay mode, else live."""
+    if config.REPLAY_MODE:
+        try:
+            data = json.loads((config.SNAPSHOT_DIR / "disruptions.json").read_text())
+            return [Disruption(**d) for d in data]
+        except OSError:
+            return []
     r = await client.get(config.DISRUPTION_URL, params=_params(), timeout=30)
     r.raise_for_status()
     out: list[Disruption] = []

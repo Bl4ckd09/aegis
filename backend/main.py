@@ -10,6 +10,7 @@ later phases and hang off the shared AppState created in the lifespan below.
 from __future__ import annotations
 
 import contextlib
+import json
 from pathlib import Path
 
 import httpx
@@ -38,8 +39,10 @@ class AppState:
 
     @property
     def monitored(self) -> list[Camera]:
-        """Available cameras with an image URL, optionally capped for demo responsiveness."""
-        avail = [c for c in self.cameras if c.available and c.image_url]
+        """Available cameras, optionally capped for demo responsiveness.
+        In replay mode frames come from the snapshot by id, so image_url isn't required."""
+        avail = [c for c in self.cameras
+                 if c.available and (config.REPLAY_MODE or c.image_url)]
         return avail[: config.CAMERA_LIMIT] if config.CAMERA_LIMIT else avail
 
 
@@ -56,6 +59,13 @@ async def lifespan(app: FastAPI):
         state.cameras = []
     state.camera_by_id = {c.id: c for c in state.cameras}
     print(f"[startup] cameras={len(state.cameras)} monitored={len(state.monitored)}")
+    if config.REPLAY_MODE:
+        try:
+            seeded = json.loads((config.SNAPSHOT_DIR / "incidents.json").read_text())
+            state.store.seed(seeded)
+            print(f"[startup] REPLAY: seeded {len(seeded)} incidents from snapshot")
+        except OSError as e:
+            print(f"[startup] REPLAY: no incidents snapshot ({e})")
     state.detector = Detector(state, state.store)
     state.detector.start()
     state.disruptions = DisruptionPoller(state, state.store)
@@ -157,9 +167,9 @@ async def cameras():
 async def frame(camera_id: str):
     """Proxy a single camera's current JPEG (keeps S3/CORS + offline replay centralized)."""
     cam = state.camera_by_id.get(camera_id)
-    if not cam or not cam.image_url:
+    if not cam:
         raise HTTPException(status_code=404, detail="unknown camera")
-    img = await tfl.fetch_image(state.client, cam.image_url)
+    img = await tfl.get_frame(state.client, cam)  # replay-aware (snapshot or live)
     if img is None:
         raise HTTPException(status_code=502, detail="frame fetch failed")
     return Response(content=img, media_type="image/jpeg",

@@ -26,6 +26,15 @@ class IncidentStore:
         self.sweeps = 0
         self.last_scan_at: Optional[str] = None
 
+    def seed(self, states: list[dict]) -> None:
+        """Pre-populate from a saved snapshot (replay mode) so the HUD is
+        immediately populated even before the first live sweep."""
+        for st in states:
+            cid = st.get("camera_id")
+            if cid:
+                self.states[cid] = st
+        self.last_scan_at = _now_iso()
+
     # --- writes (called from the detector; no awaits => asyncio-safe) ---------
     def record(self, cam: Camera, result: dict) -> dict:
         now = _now_iso()
