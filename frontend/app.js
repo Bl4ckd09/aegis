@@ -190,6 +190,42 @@ function buildLegend() {
   });
 }
 
+// --- Ripple: causal cascade (planning mode) ----------------------------
+const rippleLayer = L.layerGroup().addTo(map);
+
+function renderCascadeImpact(r) {
+  const el = document.getElementById("cascade-impact");
+  if (!el) return;
+  el.innerHTML = `
+    <div class="cascade-head"><b>${(r.est_daily_journeys || 0).toLocaleString()}</b> daily journeys affected</div>
+    <div class="cascade-row"><b>${(r.affected_nodes || 0).toLocaleString()}</b> road junctions</div>
+    <div class="cascade-row"><b>${(r.affected_stops || 0).toLocaleString()}</b> bus stops · <b>${(r.affected_routes || 0)}</b> routes</div>`;
+}
+
+async function runCascade(lat, lon) {
+  const panel = document.getElementById("cascade-impact");
+  if (panel) panel.innerHTML = '<span class="muted small">computing cascade…</span>';
+  rippleLayer.clearLayers();
+  try {
+    const res = await fetch("/api/cascade", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lon }),
+    });
+    if (!res.ok) { if (panel) panel.innerHTML = '<span class="muted small">cascade engine still loading…</span>'; return; }
+    const r = await res.json();
+    (r.ripple_points || []).forEach((p) =>
+      L.circleMarker([p.lat, p.lon], { radius: 2.5, weight: 0, fillColor: "#4ea1ff", fillOpacity: 0.35 }).addTo(rippleLayer));
+    L.circleMarker([lat, lon], { radius: 9, color: "#fff", weight: 2, fillColor: "#e74c3c", fillOpacity: 0.95 })
+      .addTo(rippleLayer).bindPopup("Disruption epicentre").openPopup();
+    renderCascadeImpact(r);
+  } catch (e) {
+    if (panel) panel.innerHTML = '<span class="muted small">cascade failed</span>';
+    console.error(e);
+  }
+}
+
+map.on("click", (e) => runCascade(e.latlng.lat, e.latlng.lng));
+
 // --- boot --------------------------------------------------------------
 buildLegend();
 loadCameras().catch((e) => {
