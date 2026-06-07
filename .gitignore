@@ -15,3 +15,6 @@ data/
 .DS_Store
 *.log
 *.pid
+
+# generated response cache (42MB hash-named JSON)
+cache/
