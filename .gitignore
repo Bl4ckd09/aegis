@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Runtime data (incidents log, thumbnails, snapshots, server logs/pids)
+data/
+
+# Models / large weights (never commit)
+*.gguf
+*.safetensors
+
+# OS / editor
+.DS_Store
+*.log
+*.pid

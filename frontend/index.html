@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aegis — London Traffic Incident HUD</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">
+      <span class="logo">▲</span>
+      <div>
+        <h1>AEGIS</h1>
+        <span class="tagline">London traffic incident HUD · local VL on DGX Spark</span>
+      </div>
+    </div>
+    <div id="status" class="status">
+      <span class="dot" id="health-dot"></span>
+      <span id="status-text">connecting…</span>
+    </div>
+  </header>
+
+  <div id="leadbanner" class="leadbanner hidden">
+    <span class="lead-icon">⏱</span>
+    <span id="leadbanner-text"></span>
+  </div>
+
+  <main>
+    <div id="map"></div>
+
+    <aside id="sidebar">
+      <section class="card briefing">
+        <h2>Operator briefing</h2>
+        <p id="briefing-text" class="briefing-text muted">Awaiting first scan…</p>
+        <span id="briefing-time" class="timestamp"></span>
+      </section>
+
+      <section class="card legend">
+        <h2>Legend</h2>
+        <ul id="legend-list"></ul>
+      </section>
+
+      <section class="card incidents">
+        <div class="incidents-head">
+          <h2>Incident log</h2>
+          <span id="incident-count" class="badge">0</span>
+        </div>
+        <ul id="incident-list" class="incident-list">
+          <li class="muted empty">No incidents detected yet.</li>
+        </ul>
+      </section>
+
+      <section class="card responsible">
+        <h2>Responsible use</h2>
+        <p class="muted small">
+          Aegis classifies road and traffic conditions only. It performs
+          <strong>no facial recognition</strong>, <strong>no number-plate reading</strong>,
+          and <strong>no tracking</strong> of any individual or vehicle across frames.
+          All inference runs locally on the Spark; no images leave the premises.
+        </p>
+      </section>
+    </aside>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
