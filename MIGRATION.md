@@ -1,4 +1,4 @@
-# Migrating Ripple to the DGX Spark (hp-15)
+# Migrating Access Health to the DGX Spark (hp-15)
 
 Goal: run the **whole stack on hp-15 locally** — FastAPI backend + RAPIDS (cuGraph/cuDF) + the
 Nemotron-VL — so it's local, private, on-Spark, with **no Modal dependency**. It's the *same code*;

@@ -1,4 +1,4 @@
-# Ripple — Demo Script & Walkthrough
+# Access Health — Demo Script & Walkthrough
 
 A tight ~3-minute live demo for **Hack for Impact London (presented by NVIDIA)**.
 Everything below reflects what the system actually does — no overclaiming.
@@ -7,7 +7,7 @@ Everything below reflects what the system actually does — no overclaiming.
 
 ## TL;DR (the elevator pitch — say this if you only get one sentence)
 > "A road closure, a part-suspended tube line, a wet Saturday — each quietly cuts a London corner
-> shop's footfall and deliveries, and the owner has no early warning. **Ripple** lets them drop a pin
+> shop's footfall and deliveries, and the owner has no early warning. **Access Health** lets them drop a pin
 > on their business and instantly see what's threatening access *right now* — tube, buses, roadworks,
 > weather — as plain warnings, plus the bottleneck they can't see: *'28% of your catchment is reached
 > past that closure.'* The catchment is a graph search on **NVIDIA RAPIDS cuGraph**, able to run
@@ -32,7 +32,7 @@ Everything below reflects what the system actually does — no overclaiming.
 ## Pre-demo checklist (do this ~10 min before)
 1. **Warm both Modal GPUs:** `curl -s https://<ws>--aegis-ripple-ripple-status.modal.run` → `"backend":"cuGraph (GPU)"`; `curl -s <modal-vllm>/v1/models`. (For safety set `min_containers=1` and redeploy.)
 2. **Launch the backend** (README run mode B) with `TFL_APP_KEY` + `AEGIS_RIPPLE_URL` set.
-3. **Warm the HUD:** open `http://127.0.0.1:8000` — title reads "RIPPLE", status dot green.
+3. **Warm the HUD:** open `http://127.0.0.1:8000` — title reads "ACCESS HEALTH", status dot green.
 4. **One practice pin** so the cuGraph CUDA init (~one-time 20 s) is paid; pick a pin that shows a strong cascade-effect today (try Whitechapel / Mile End).
 5. `curl -s localhost:8000/api/ripple/status` → `ready:true, backend:"cuGraph (GPU)"`.
 
@@ -49,14 +49,14 @@ crucially **~1,500 of them are in the most-deprived high streets.**"*
 
 ### 0:35 — Chokepoints (betweenness centrality)
 **DO:** Point at the **◆ cyan** junction markers + the chokepoint line.
-**SAY:** *"Ripple also computes the road network's **betweenness centrality** on the GPU — the junctions
+**SAY:** *"Access Health also computes the road network's **betweenness centrality** on the GPU — the junctions
 the most businesses depend on. These ◆ are London's high-street **lifelines**; the busiest supports
 **410 shops**. And **10 of today's disruptions sit right on a critical chokepoint** — outsized impact.
 That tells a council exactly which junctions to protect."*
 
 ### 1:05 — Drill into one business (the owner's view)
 **DO:** Click a shop location (e.g. **Whitechapel**) → catchment draws, panel fills.
-**SAY:** *"Now one shop. Ripple worked out its **catchment** — the roads, stops and residents that feed
+**SAY:** *"Now one shop. Access Health worked out its **catchment** — the roads, stops and residents that feed
 it — and the live warnings: **District line part-closed**, **bus routes on special service**, roadworks,
 rain. Plus the bottleneck an owner can't see:"* (point) **🌊 "~28% of your catchment is reached past
 that closure."** *"Every line a real, named signal — no black-box footfall guess."*
