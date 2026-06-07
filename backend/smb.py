@@ -106,9 +106,31 @@ def _roads(disruptions, lat: float, lon: float, radius_m: float = 2000.0) -> lis
             dist = _haversine_m(lat, lon, d.lat, d.lon)
             if dist <= radius_m:
                 out.append({"severity": d.severity, "category": d.category,
-                            "comments": (d.comments or "")[:140], "dist_m": int(dist)})
+                            "comments": (d.comments or "")[:140], "dist_m": int(dist),
+                            "lat": d.lat, "lon": d.lon})
     out.sort(key=lambda x: x["dist_m"])
     return out[:8]
+
+
+def _cascade_effect(lat: float, lon: float, pts: list[dict], roads: list[dict]) -> dict | None:
+    """The nearby disruption that gates the largest share of the catchment, and that share.
+    First-order: a catchment node is 'beyond' a disruption if it's farther from the business
+    than the disruption is, and nearer the disruption than the business (i.e. in the cone
+    past it). We pick the disruption with the biggest such share — the real bottleneck."""
+    if not roads or not pts:
+        return None
+    best = None
+    for road in roads:
+        dd = _haversine_m(lat, lon, road["lat"], road["lon"])  # business → disruption
+        beyond = sum(
+            1 for p in pts
+            if _haversine_m(lat, lon, p["lat"], p["lon"]) > dd
+            and _haversine_m(road["lat"], road["lon"], p["lat"], p["lon"])
+            < _haversine_m(lat, lon, p["lat"], p["lon"]))
+        pct = round(100 * beyond / len(pts))
+        if best is None or pct > best["pct"]:
+            best = {"category": road["category"], "dist_m": road["dist_m"], "pct": pct}
+    return best if best and best["pct"] >= 3 else None
 
 
 async def exposure(client, lat: float, lon: float, catchment: dict, disruptions) -> dict:
@@ -119,6 +141,7 @@ async def exposure(client, lat: float, lon: float, catchment: dict, disruptions)
         _weather(client, lat, lon),
     )
     roads = _roads(disruptions, lat, lon)
+    cascade_fx = _cascade_effect(lat, lon, catchment.get("ripple_points", []), roads)
 
     reasons, score = [], 100
     for t in tube["disrupted"]:
@@ -136,6 +159,11 @@ async def exposure(client, lat: float, lon: float, catchment: dict, disruptions)
         reasons.append({"icon": "🌧", "text": f"Rain likely today ({rain}%)",
                         "detail": "High streets typically see lower footfall in wet weather."})
         score -= 10
+    if cascade_fx:  # headline cascade insight — the thing an owner can't see themselves
+        reasons.insert(0, {"icon": "🌊",
+                           "text": f"~{cascade_fx['pct']}% of your catchment is reached past the "
+                                   f"{cascade_fx['category']} disruption {cascade_fx['dist_m']}m away",
+                           "detail": "Customers, staff and deliveries from that side face a longer or blocked route."})
     score = max(0, min(100, score))
     if not reasons:
         reasons.append({"icon": "✅", "text": "No live disruptions affecting your catchment", "detail": None})
@@ -149,6 +177,7 @@ async def exposure(client, lat: float, lon: float, catchment: dict, disruptions)
                       "routes": catchment.get("affected_routes"),
                       "nodes": catchment.get("affected_nodes")},
         "tube": tube, "bus": bus, "weather": weather, "roads": roads,
+        "cascade_effect": cascade_fx,
         "reasons": reasons,
         "engine": catchment.get("engine"),
         "ripple_points": catchment.get("ripple_points", []),
