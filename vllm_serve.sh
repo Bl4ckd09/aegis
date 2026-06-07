@@ -20,13 +20,15 @@ case "${1:-start}" in
     # pip tree (nvcc 13.3 + cudart 13.0) which fails the cccl version check. $VENV/bin gives ninja.
     export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda-13.0}"
     export PATH="$CUDA_HOME/bin:$VENV/bin:$PATH"
-    # Conservative memory on the shared GB10: ~0.3 of 122GB for weights+KV.
-    # --max-model-len kept small (short prompts + one tiny image) to bound KV cache.
+    # Conservative memory on the shared GB10: 0.25 of ~119GB (~30GB) for weights+KV.
+    # The 12B-v2 hybrid weighs ~24GB; at max-model-len 8192 + one tiny image the KV
+    # pool needs only a few GB, so 0.40 (~47GB) over-reserved ~17GB of idle KV. 0.25
+    # reclaims it with no throughput loss. --max-model-len kept small to bound KV cache.
     setsid "$VENV/bin/vllm" serve "$MODEL" \
       --port "$PORT" \
       --trust-remote-code \
       --served-model-name nemotron-nano-vl \
-      --gpu-memory-utilization "${VLM_GPU_UTIL:-0.40}" \
+      --gpu-memory-utilization "${VLM_GPU_UTIL:-0.25}" \
       --max-model-len "${VLM_MAXLEN:-8192}" \
       --limit-mm-per-prompt '{"image":1}' \
       --enforce-eager \
