@@ -76,8 +76,8 @@ async def main():
     async with httpx.AsyncClient() as c:        # warm
         await one(c); await one(c)
     out = {"image_bytes": len(base64.b64decode(B64)), "results": []}
-    for conc in [1, 2, 4, 8, 16, 32, 64]:
-        res = await level(conc, min(max(conc * 2, 12), 64))
+    for conc in [1, 2, 4, 8, 16]:
+        res = await level(conc, min(max(conc * 2, 12), 32))
         out["results"].append(res); print(json.dumps(res), flush=True)
     async with httpx.AsyncClient() as c:
         out["ttft"] = await ttft_sample(c)

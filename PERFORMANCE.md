@@ -152,3 +152,74 @@ bash vllm_serve.sh stop
 AEGIS_DATA_DIR="$PWD/data" PYTHONPATH="$PWD" .venv/bin/python scripts/benchmark_gpu_cpu.py
 bash vllm_serve.sh start                          # restore VL server (0.25 util)
 ```
+
+## Machine + use-case benchmark suite (2026-06-07)
+
+A full sweep of the GB10 DGX Spark and every Access Health subsystem, ordered by run
+time. Harnesses: `scripts/benchmark_{cascade,gpu_cpu,spatial,vl,briefing}.py` plus ad-hoc
+`cupy`/`dd` probes.
+
+### Hardware baseline (GB10) — the headline contention finding
+
+| Metric | Under production load | Idle (services paused) | loss to contention |
+|---|---:|---:|---:|
+| Memory bandwidth (cuPy triad) | 53 GB/s | **152 GB/s** | −65 % |
+| FP16 matmul 8192³ | 21.2 TFLOP/s | **63.1 TFLOP/s** | −66 % |
+| FP32 matmul 8192³ | 9.3 TFLOP/s | **19.7 TFLOP/s** | −53 % |
+
+The shared GB10 loses ~⅔ of its compute/bandwidth when VL + llama.cpp + detector run
+concurrently. This is the root cause of slow VL decode: the model is memory-bandwidth-bound
+and only ~⅓ of bandwidth is free under load.
+
+### Subsystem results
+
+| # | Benchmark | Result |
+|---|---|---|
+| 1 | Cascade BFS sweep (CPU-routed) | ~19–24 rps flat to c=32, no cliff (under detector load) |
+| 2 | API endpoints (`:8000` GETs) | 0–9 ms each (highstreets 9 ms cached, cameras 7 ms) |
+| 3 | NVMe disk I/O (3.6 TB) | write **4.0 GB/s**, read **5.8 GB/s** (direct) |
+| 5 | Spatial haversine over 28k pts | CPU 0.55 ms vs **GPU 0.125 ms (4.4×)** |
+| 6 | Graph BFS / betweenness (idle GPU) | BFS GPU 27.6 ms vs CPU 0.10 ms (CPU ~275×); betweenness GPU 0.67 s vs CPU 6.8 s (10.1×) |
+| 7 | VL perception throughput (@0.25, isolated) | plateau **~0.44 img/s** at c≥8; single-image **6.5 s isolated vs ~20 s under load**; TTFT 1.6 s, ~9 tok/s decode |
+| 8 | Briefing LLM (Nemotron-3-30B-A3B) | decode **44.5 → 68.5 tok/s** (c=1→4); ~478 tok/briefing, p50 **10.9 s** @ c=1; TTFT 8.8 s (prefill) |
+
+### LLM serving detail
+
+**#7 VL detector** (vLLM `nemotron-nano-vl`, 12B dense, `0.25`, KV concurrency 5.17×):
+
+| Conc | images/s | p50 | tokens/s |
+|---:|---:|---:|---:|
+| 1 | 0.15 | 6.5 s | 7.3 |
+| 2 | 0.25 | 8.0 s | 11.6 |
+| 4 | 0.36 | 10.9 s | 17.0 |
+| 8 | 0.42 | 16.7 s | 19.6 |
+| 16 | 0.44 | 33.6 s | 20.8 |
+
+Each JamCam image is ~3,355 prompt tokens (prefill-dominated) + ~47 output. Throughput
+plateaus ~0.44 img/s; aggregate decode caps ~21 tok/s (the ~5-seq KV ceiling at `0.25`).
+
+**#8 briefing** (llama.cpp `Nemotron-3-Nano-30B-A3B`, MoE 3B-active, :30000):
+
+| Conc | briefings/s | p50 | tokens/s |
+|---:|---:|---:|---:|
+| 1 | 0.09 | 10.9 s | 44.5 |
+| 2 | 0.12 | 16.1 s | 55.5 |
+| 4 | 0.15 | 23.1 s | 68.5 |
+
+~478 tokens/briefing; TTFT ~8.8 s (30B prefill), decode 44.5 tok/s single-stream.
+
+### Takeaways
+
+- **The box is memory-bandwidth-bound, not compute-bound** for the LLM paths; contention,
+  not raw GPU power, is the limiter. Co-residency costs ~⅔ of GPU bandwidth/FLOPS, and that
+  shows up directly as VL latency: **6.5 s/image isolated vs ~20 s under load (≈3×)**.
+- **MoE beats dense on decode here:** the 30B-A3B briefing model (3B active) decodes at
+  **44.5 tok/s** — faster than the 12B *dense* VL model at ~9 tok/s single-stream — because
+  decode reads only the active experts, not all weights. Bandwidth, not parameter count, rules.
+- **Disk, spatial, and API layers are not bottlenecks** — all sub-10 ms / multi-GB/s.
+- Confirms the earlier architectural call: **per-query BFS on CPU** (0.1 ms, no GPU/bandwidth
+  contention) is the right default; reserve scarce GPU bandwidth for the LLM serving.
+- **Tuning levers for VL throughput** (if needed): the ~5-seq ceiling at `0.25` caps it;
+  widening the KV pool (higher gpu-util) or lowering `--max-model-len` raises concurrency,
+  but single-image latency stays bandwidth-bound. Isolating the detector sweep from
+  interactive load removes the ~3× contention tax.
