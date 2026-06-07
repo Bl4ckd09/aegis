@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ripple — disruption early-warning for London businesses</title>
+  <title>Access Health — disruption early-warning for London businesses</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="/style.css" />
 </head>
@@ -12,15 +12,28 @@
     <div class="brand">
       <span class="logo">▲</span>
       <div>
-        <h1>RIPPLE</h1>
+        <h1>ACCESS HEALTH</h1>
         <span class="tagline">Disruption early-warning for London small businesses · powered by NVIDIA</span>
       </div>
     </div>
-    <div id="status" class="status">
-      <span class="dot" id="health-dot"></span>
-      <span id="status-text">connecting…</span>
+    <div style="display:flex;align-items:center;gap:20px;">
+      <nav class="app-nav" style="display:flex;gap:14px;align-items:center;font-size:13px;">
+        <span style="color:var(--accent);font-weight:600;">Access Health</span>
+        <a id="financialHealthLink" href="#" target="_blank" rel="noopener"
+           style="color:var(--muted);text-decoration:none;" title="Find what your business is owed in rates relief and grants">Financial Health →</a>
+      </nav>
+      <div id="status" class="status">
+        <span class="dot" id="health-dot"></span>
+        <span id="status-text">connecting…</span>
+      </div>
     </div>
   </header>
+  <script>
+    // Sibling app (Financial Health / STELLA) runs on :5000 on the same host —
+    // host-relative so it works over the SSH tunnel (localhost) and direct on hp-15.
+    document.getElementById("financialHealthLink").href =
+      location.protocol + "//" + location.hostname + ":5000/";
+  </script>
 
   <div id="leadbanner" class="leadbanner hidden">
     <span class="lead-icon">⏱</span>
