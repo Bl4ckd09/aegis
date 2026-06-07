@@ -11,16 +11,21 @@ Everything below reflects what the system actually does — no overclaiming.
 > on their business and instantly see what's threatening access *right now* — tube, buses, roadworks,
 > weather — as plain warnings, plus the bottleneck they can't see: *'28% of your catchment is reached
 > past that closure.'* The catchment is a graph search on **NVIDIA RAPIDS cuGraph**, able to run
-> **locally on a DGX Spark**."
+> **locally on a DGX Spark** — and at city scale it shows councils the same thing for **every high
+> street at once**, weighted by **deprivation**."
 
 ---
 
 ## The signals to land (real output)
-- **Whitechapel pin:** access health **low**, and the headline cascade insight —
-  **🌊 "~28% of your catchment is reached past the works disruption 411 m away."**
+- **City view (live):** ~**9,500** of 25k high-street businesses access-impaired by **80 road + 1,200+
+  tube/bus** disruption points, **~1,500 in the most-deprived high streets**; **10** disruptions on
+  critical **chokepoints**; busiest **lifeline junction** supports **410** businesses.
 - **Brick Lane pin:** **🚇 District line — Part Closure**, **🚌 buses 242/35/55/78 — Special Service**,
   roadworks within 600 m, weather — every warning a **named, real** signal.
-- **Performance:** the catchment (BFS over **21,908** road nodes) computes in **~0.6 s** on **cuGraph (GPU)**.
+- **Whitechapel pin:** the headline cascade insight — **🌊 "~28% of your catchment is reached past the
+  works disruption 411 m away."**
+- **Performance:** catchment BFS over **21,908** nodes in **~0.6 s**; the city-scale batch cascade +
+  betweenness centrality run on **cuGraph (GPU)**.
 
 ---
 
@@ -35,44 +40,42 @@ Everything below reflects what the system actually does — no overclaiming.
 
 ## The 3-minute walkthrough
 
-### 0:00 — The problem
-**SAY:** *"Big chains have analysts watching for disruptions. The corner café doesn't — it just sees a
-quiet day and doesn't know why. The signals are all public, but nobody joins them to *that shop's*
-location. Ripple does."*
-**DO:** Map of London; the **"Your business — access health"** panel top-right.
+### 0:00 — The problem, at city scale (open on the high-street health map)
+**SAY:** *"Every road closure, tube outage and roadwork in London quietly cuts small-business
+footfall — and no one joins it up. This is **every London high street, right now**: red means
+access-impaired. Today, ~**9,500 businesses** are impaired by **80-plus live disruptions** — and
+crucially **~1,500 of them are in the most-deprived high streets.**"*
+**DO:** The red/green high-street heatmap + the **"London high streets — today"** panel.
 
-### 0:25 — Drop a pin (the hero moment)
-**DO:** Click a business location (e.g. **Whitechapel**). The catchment draws (a blue footprint), and
-the panel fills.
-**SAY:** *"I dropped a pin on my shop. Ripple worked out my **catchment** — the roads, bus stops and
-~17,000 residents that actually feed me — and scored my access health. And the headline:"*
-(point at) **🌊 "~28% of your catchment is reached past the works disruption 411 m away."**
-*"That's the bottleneck an owner can't see — a quarter of my customers are on the far side of that
-closure."*
+### 0:35 — Chokepoints (betweenness centrality)
+**DO:** Point at the **◆ cyan** junction markers + the chokepoint line.
+**SAY:** *"Ripple also computes the road network's **betweenness centrality** on the GPU — the junctions
+the most businesses depend on. These ◆ are London's high-street **lifelines**; the busiest supports
+**410 shops**. And **10 of today's disruptions sit right on a critical chokepoint** — outsized impact.
+That tells a council exactly which junctions to protect."*
 
-### 0:55 — The live warnings
-**DO:** Read the warnings list.
-**SAY:** *"And the live picture, every line a real signal: the **District line is part-closed**, **four
-bus routes that serve me are on special service**, roadworks 600 m away, and rain this afternoon. No
-black-box footfall guess — just what's actually happening around me, right now."*
+### 1:05 — Drill into one business (the owner's view)
+**DO:** Click a shop location (e.g. **Whitechapel**) → catchment draws, panel fills.
+**SAY:** *"Now one shop. Ripple worked out its **catchment** — the roads, stops and residents that feed
+it — and the live warnings: **District line part-closed**, **bus routes on special service**, roadworks,
+rain. Plus the bottleneck an owner can't see:"* (point) **🌊 "~28% of your catchment is reached past
+that closure."** *"Every line a real, named signal — no black-box footfall guess."*
 
-### 1:25 — How (the NVIDIA stack + Spark story)
-**SAY:** *"That catchment is a graph search over ~22,000 road nodes — on **RAPIDS cuGraph, on an NVIDIA
-GPU**, in about **0.6 seconds**. Joins use **cuDF**, tube/bus status is live from TfL, weather from
-Open-Meteo. On a **DGX Spark**, the road graph and the vision model live together in **128 GB of
-unified memory** — it runs locally, nothing leaves the premises."* (point at **⚡ catchment via
-cuGraph (GPU)**.)
+### 1:40 — How (the NVIDIA stack + Spark story)
+**SAY:** *"The catchment is a cuGraph BFS in ~0.6 s; the city view **batch-cascades all 80+ disruptions
+over 28,000 businesses** and runs **betweenness centrality** — real load on the GPU, with **cuDF** joins.
+On a **DGX Spark**, the road graph, the demographics and the vision model live together in **128 GB of
+unified memory** — local, nothing leaves the premises."* (point at **⚡ via cuGraph (GPU)**.)
 
-### 1:55 — Validation layer (Aegis: click a camera)
+### 2:10 — Validation layer (Aegis: click a camera)
 **DO:** Click a camera marker → live frame.
-**SAY:** *"And when a disruption is live, Ripple can **confirm it with the camera** — an **NVIDIA
-Nemotron vision-language model** reads the road, **conditions only, never people**. So the warning
-isn't just a feed entry; it's verified."*
+**SAY:** *"And a live disruption can be **confirmed with the camera** — an **NVIDIA Nemotron
+vision-language model** reads the road, **conditions only, never people**."*
 
-### 2:25 — Close
-**SAY:** *"So a small-business owner gets an early warning a chain would pay an analyst for — what's
-hitting their footfall today and why — built on London's open data and NVIDIA's GPU stack, private
-and local on a Spark."*
+### 2:35 — Close
+**SAY:** *"So: a corner-shop owner gets an early warning a chain would pay an analyst for — and a
+council gets a live, equity-weighted map of which high streets are suffering and which junctions to
+protect. One open-data, NVIDIA-GPU engine, private and local on a Spark."*
 
 ---
 

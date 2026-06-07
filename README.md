@@ -8,6 +8,12 @@ roadworks, and weather**. The result is an **access-health score** and a list of
 warnings** an owner can act on — including the **cascade-effect** insight they can't see themselves:
 *"~28% of your catchment is reached past the works disruption 400 m away."*
 
+And at **city scale**, Ripple batch-cascades **all of today's live disruptions** (road + tube + bus,
+severity-weighted) over **~28,000 high-street businesses** on the GPU to produce a live **high-street
+access-health map** — which neighbourhoods are impaired, **weighted by deprivation** — plus the
+**chokepoint "lifeline" junctions** (RAPIDS cuGraph **betweenness centrality**) the most businesses
+depend on. A warning tool for one owner; a **public-good instrument** for councils and BIDs.
+
 Built for **Hack for Impact London (presented by NVIDIA)**. Designed to run **locally on an NVIDIA
 DGX Spark** — the road graph and the vision model co-resident in 128 GB of unified memory; every
 NVIDIA component is one env var, so the same stack also runs on a cloud RAPIDS GPU + Modal H100.
@@ -37,7 +43,17 @@ location**. Ripple joins them to your catchment and warns you, in plain language
 - **No black-box footfall %.** Every penalty is a real, attributed signal — exposure/early-warning,
   not a fabricated prediction.
 
+**At city scale (the collective, public-good view):**
+- **Batch-cascades today's live disruptions** — road (full BFS ripple, radius scaled by severity) +
+  disrupted tube/rail/bus lines (their stops/stations) — over ~28k businesses on the GPU.
+- **High-street access-health map**, deprivation-weighted: which high streets are impaired, ranked,
+  with the count of affected businesses in the **most-deprived 20%**.
+- **Betweenness centrality** (cuGraph) → **"lifeline" junctions** the most businesses depend on (which
+  to protect), and flags how many of today's disruptions sit on a critical chokepoint.
+
 ## How it works
+
+**Per business (the pin):**
 
 ```
 your business (map pin)
@@ -57,11 +73,28 @@ road graph (OSMnx, ~21.9k nodes / 50.5k edges), bus stops (TfL StopPoint) and th
 deprivation table (London IoD2019) are built once and cached. The same engine also exposes a
 planner-facing cascade (`POST /api/cascade`) — given a *disruption*, who's affected downstream.
 
+**City scale (the collective view, `POST /api/highstreets`):**
+
+```
+today's live disruptions                          betweenness centrality (cuGraph, once)
+  road  → BFS cascade (severity-scaled radius)        → chokepoint percentile per junction
+  tube/bus (disrupted lines → stops/stations)         → "lifeline" junctions ranked by
+        → local node impairment                          businesses depending on them
+            │                                                     │
+            └──────────────► severity-weighted node impairment ◄──┘
+                              → aggregate ~28k businesses by LSOA high street
+                              → access health + deprived-affected count + chokepoint flags
+```
+
+Both run on the same GPU engine; the city-scale pass is where the batch BFS + betweenness genuinely
+load the GPU. Heavy data is cached, so the per-call cost is the live disruptions only.
+
 ## The NVIDIA stack
 
 | Role | Model / library | NVIDIA |
 |---|---|---|
-| **Catchment graph BFS** | **RAPIDS cuGraph** (GPU) · networkx CPU fallback | ✅ |
+| **Catchment + city-scale batch cascade (BFS)** | **RAPIDS cuGraph** (GPU) · networkx CPU fallback | ✅ |
+| **Chokepoint analytics** | **RAPIDS cuGraph betweenness centrality** (GPU) | ✅ |
 | Impact + spatial joins | **RAPIDS cuDF / cuPy** (GPU) · NumPy/pandas fallback | ✅ |
 | Perception / footage validation | **Nemotron-Nano-12B-v2-VL** (FP8) on **vLLM** | ✅ |
 | Operator briefing | **NVIDIA Nemotron** | ✅ |
@@ -166,6 +199,7 @@ TFL_APP_KEY=<key> \
 | Endpoint | Returns |
 |---|---|
 | `POST /api/smb/exposure` `{lat,lon}` | **SMB early-warning**: access-health, attributed warnings (tube/bus/roads/weather/cascade), catchment, engine |
+| `GET /api/highstreets` | **city-scale collective view**: per-high-street access health (deprivation-weighted), worst-hit ranking, betweenness chokepoint "lifelines", multi-modal totals |
 | `POST /api/cascade` `{lat,lon,hops}` | planner cascade: who's affected downstream of a disruption (the engine under SMB) |
 | `GET /api/ripple/status` | catchment engine readiness + BFS backend + graph size |
 | `GET /api/health` · `/api/cameras` · `/api/frame/{id}` · `/api/states` · `/api/incidents` · `/api/briefing` · `/api/disruptions` | perception layer (Aegis) |
